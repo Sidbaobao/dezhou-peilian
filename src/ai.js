@@ -38,6 +38,7 @@
     };
     const chance = x => rng() < x;
     const stack = p.chips + p.bet;
+    // delay 是思考时间的相对系数：快速弃牌 0.6，普通跟注 1，加注 1.3，全下 1.6 左右，由界面换算成毫秒
     const result = (type, amount, delay) => ({ type, amount, delay: delay || 1 });
 
     /* ---------- 翻牌前 ---------- */

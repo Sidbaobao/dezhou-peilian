@@ -61,7 +61,7 @@
   const DEFAULT_PROFILE = () => ({
     bankroll: 10000, xp: 0, achievements: {}, lastDaily: null, signinStreak: 0,
     stats: { hands: 0, wins: 0, showdownWins: 0, vpipHands: 0, biggestPot: 0, bestHand: null, bestHandScore: 0, dealerCorrect: 0, dealerTotal: 0, dealerStreak: 0, dealerBest: 0, bustCount: 0, streak: 0, bestStreak: 0, chipsWon: 0, coachAgree: 0, coachTotal: 0, coachStreak: 0 },
-    settings: { coach: true, dealer: false, opponents: 5, fourColor: false, sound: true, speed: 'normal', autoNext: true, felt: 'green', back: 'classic', showBots: true },
+    settings: { coach: true, dealer: false, opponents: 5, fourColor: false, sound: true, speed: 'normal', autoNext: true, felt: 'green', back: 'classic', showBots: true, heroTimer: true, autoAct: false },
     daily: null,
     lastTable: null,
     session: null,
@@ -289,6 +289,8 @@
     $('#bank-amount').textContent = fmt(profile.bankroll);
     $('#level-no').textContent = level;
     $('#level-title').textContent = levelTitle(level);
+    $('#level-no-2').textContent = level;
+    $('#level-title-2').textContent = levelTitle(level);
     const cur = xpForLevel(level), next = xpForLevel(level + 1);
     $('#level-xp').textContent = fmt(profile.xp - cur) + ' / ' + fmt(next - cur);
     $('#level-bar').style.transform = 'scaleX(' + Math.min(1, (profile.xp - cur) / (next - cur)) + ')';
@@ -344,7 +346,7 @@
     const b = e.target.closest('button'); if (!b) return;
     profile.settings.opponents = Number(b.dataset.n); save(); renderLobby();
   });
-  $$('.switch[data-setting]').forEach(sw => sw.addEventListener('click', () => {
+  $$('#lobby [data-setting][role="switch"]').forEach(sw => sw.addEventListener('click', () => {
     const key = sw.dataset.setting;
     profile.settings[key] = !profile.settings[key]; save(); renderLobby();
     if (session) renderAll();
@@ -484,6 +486,8 @@
       sw('fourColor', '四色牌', '方块蓝色、梅花绿色，更容易看出同花'),
       sw('sound', '音效'),
       sw('autoNext', '一手结束后自动开下一手'),
+      sw('heroTimer', '轮到你时显示 30 秒倒计时', '和线下一样给自己一点压力'),
+      sw('autoAct', '倒计时结束自动过牌或弃牌', '关掉的话时间到了也可以继续想'),
       seg('speed', '对手速度', [['slow', '慢'], ['normal', '正常'], ['fast', '快']]),
       seg('opponents', '对手人数', [[2, '2'], [3, '3'], [4, '4'], [5, '5']], '下一次坐下时生效'),
       swatches('felt', 'felt', '桌布', [['green', '绿'], ['blue', '蓝'], ['red', '红'], ['purple', '紫']]),
@@ -556,6 +560,7 @@
     if (!session) return;
     const g = session.game, st = session.stats;
     session.token.cancelled = true;
+    stopHeroTimer();
     closeOverlays();
     closeQuiz();
     if (g.phase === 'betting' || g.phase === 'between') fastForward();
@@ -598,6 +603,7 @@
     seatEls.length = 0; betEls.length = 0;
     session.game.players.forEach((p, i) => {
       const avatar = el('div', { class: 'avatar', text: p.name.slice(0, 1) });
+      avatar.insertAdjacentHTML('beforeend', '<svg class="ring" viewBox="0 0 36 36" aria-hidden="true"><circle class="track" cx="18" cy="18" r="16" pathLength="100"/><circle class="fill" cx="18" cy="18" r="16" pathLength="100"/></svg>');
       if (i !== HERO && STYLE_HUE[p.style]) avatar.style.setProperty('--avatar-bg', STYLE_HUE[p.style]);
       const seat = el('div', { class: 'seat' + (i === HERO ? ' hero' : ''), 'data-seat': i }, [
         el('div', { class: 'seat-cards' }),
@@ -605,7 +611,6 @@
           el('span', { class: 'seat-pos' }),
           el('div', { class: 'seat-main' }, [avatar, el('div', { class: 'seat-text' }, [el('div', { class: 'seat-name', text: p.name }), el('div', { class: 'seat-chips num' })])]),
           el('div', { class: 'seat-status' }),
-          el('span', { class: 'seat-think' }),
         ]),
       ]);
       seat.addEventListener('click', () => onSeatClick(i));
@@ -682,7 +687,12 @@
     const last = actionLabel(p.lastAction);
     if (p.allIn) return ['全下', 'allin'];
     if (g.phase === 'betting') {
-      if (g.toAct === p.seat) return [session.quizPending && session.quizHide ? '' : (p.seat === HERO ? '轮到你' : '行动中'), 'act'];
+      if (g.toAct === p.seat) {
+        if (session.quizPending && session.quizHide) return ['', ''];
+        if (p.seat !== HERO) return ['思考中', 'act'];
+        if (session.heroDeadline) { const left = Math.max(0, Math.ceil((session.heroDeadline - Date.now()) / 1000)); return [left > 0 ? '轮到你 · ' + left + ' 秒' : '轮到你 · 时间到', 'act']; }
+        return ['轮到你', 'act'];
+      }
       if (p.bet < g.currentBet) return profile.settings.coach ? ['还差 ' + fmt(g.currentBet - p.bet), 'need'] : [last, ''];
       if (p.acted) return ['✓ ' + (last || '已跟平'), 'ok'];
       return profile.settings.coach ? ['待表态', 'need'] : [last, ''];
@@ -832,14 +842,15 @@
     const legal = g.legalActions(HERO);
     const hints = profile.settings.coach ? C.hints(g, HERO) : {};
     const cc = $('#act-check-call'), raise = $('#act-raise');
-    $('#act-fold').textContent = '弃牌';
-    if (legal.check) cc.innerHTML = '过牌';
-    else cc.innerHTML = (legal.callIsAllIn ? '跟注全下' : '跟注') + '<small>' + fmt(legal.toCall) + '</small>';
+    const lbl = (text, key) => '<span class="lbl">' + text + '<kbd>' + key + '</kbd></span>';
+    $('#act-fold').innerHTML = lbl('弃牌', 'F');
+    if (legal.check) cc.innerHTML = lbl('过牌', 'C');
+    else cc.innerHTML = lbl(legal.callIsAllIn ? '跟注全下' : '跟注', 'C') + '<small>' + fmt(legal.toCall) + '</small>';
     if (legal.raise) {
       const verb = g.currentBet === 0 ? '下注' : '加注';
       raise.disabled = false;
-      raise.innerHTML = legal.raise.min === legal.raise.max ? '全下<small>' + fmt(legal.raise.max) + '</small>' : verb + '<small>至少 ' + fmt(legal.raise.min) + '</small>';
-    } else { raise.disabled = true; raise.innerHTML = '加注<small>不可用</small>'; }
+      raise.innerHTML = legal.raise.min === legal.raise.max ? lbl('全下', 'R') + '<small>' + fmt(legal.raise.max) + '</small>' : lbl(verb, 'R') + '<small>至少 ' + fmt(legal.raise.min) + '</small>';
+    } else { raise.disabled = true; raise.innerHTML = lbl('加注', 'R') + '<small>不可用</small>'; }
     $('#hint-fold').textContent = hints.fold || '';
     $('#hint-check-call').textContent = hints.check || hints.call || '';
     $('#hint-raise').textContent = hints.raise || '';
@@ -961,10 +972,37 @@
     const token = session.token;
     let events;
     try { events = g.act(HERO, action); } catch (err) { toast(err.message); return; }
+    stopHeroTimer();
     actionsEl.hidden = true; raisePanel.hidden = true; raiseState = null;
     await applyEvents(events, token);
     if (token.cancelled) return;
     runLoop(token);
+  }
+
+  /* 轮到你时的倒计时：只是显示，开了“超时自动行动”才会替你过牌或弃牌 */
+  const HERO_SECONDS = 30;
+  let heroTick = null;
+  function startHeroTimer() {
+    stopHeroTimer();
+    if (!profile.settings.heroTimer || !session) return;
+    session.heroDeadline = Date.now() + HERO_SECONDS * 1000;
+    seatEls[HERO].style.setProperty('--think-ms', HERO_SECONDS * 1000 + 'ms');
+    heroTick = setInterval(() => {
+      if (!session || !session.heroDeadline) { stopHeroTimer(); return; }
+      renderSeats();
+      if (Date.now() >= session.heroDeadline) {
+        stopHeroTimer();
+        session.heroDeadline = null;
+        if (profile.settings.autoAct) {
+          const g = session.game;
+          if (g.phase === 'betting' && g.toAct === HERO && !quiz) { const legal = g.legalActions(HERO); toast(legal.check ? '时间到，替你过牌' : '时间到，替你弃牌'); heroAct({ type: legal.check ? 'check' : 'fold' }); }
+        } else renderSeats();
+      }
+    }, 500);
+  }
+  function stopHeroTimer() {
+    if (heroTick) { clearInterval(heroTick); heroTick = null; }
+    if (session) session.heroDeadline = null;
   }
 
   /* ---------- 流程 ---------- */
@@ -1014,7 +1052,7 @@
           renderAll();
         }
         const seat = g.toAct;
-        if (seat === HERO) { renderAll(); Sound.turn(); return; }
+        if (seat === HERO) { startHeroTimer(); renderAll(); Sound.turn(); return; }
         const events = await botTurn(seat, token);
         if (token.cancelled) return;
         if (profile.settings.dealer && !session.hand.askedMinRaise && g.phase === 'betting' && events.some(e => e.type === 'action' && e.action === 'raise' && e.full)) {
@@ -1050,10 +1088,28 @@
       return;
     }
   }
+  /* 对手思考时间：按决定的分量、面对的压力和性格变化，偶尔长考 */
+  function thinkTime(g, seat, d) {
+    const p = g.players[seat];
+    const style = AI.STYLES[p.style] || AI.STYLES.balanced;
+    const legal = g.legalActions(seat);
+    const toCall = legal ? legal.toCall : 0;
+    let ms = 1500 + Math.random() * 1400;
+    ms *= { fold: 0.7, check: 0.75, call: 1.0, raise: 1.35, allin: 1.7 }[d.type] || 1;
+    if (toCall >= g.bb * 3) ms += 600;
+    if (toCall >= g.bb * 10) ms += 800;
+    if (g.street !== 'preflop') ms += 300;
+    if (style.id === 'rock') ms += 400;
+    if (style.id === 'lag') ms -= 300;
+    if (d.type === 'fold' && g.street === 'preflop' && toCall <= g.bb) ms *= 0.55;
+    if (Math.random() < 0.07) ms += 2500 + Math.random() * 2000;
+    ms *= Math.sqrt(d.delay || 1);
+    return T(Math.round(Math.max(700, Math.min(8000, ms))));
+  }
   async function botTurn(seat, token) {
     const g = session.game;
     const d = AI.decide(g, seat);
-    const think = T(Math.round((700 + Math.random() * 700) * (d.delay || 1)));
+    const think = thinkTime(g, seat, d);
     seatEls[seat].style.setProperty('--think-ms', think + 'ms');
     renderAll();
     await wait(think);

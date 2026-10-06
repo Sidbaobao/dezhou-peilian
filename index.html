@@ -29,28 +29,52 @@
   <!-- ================= 大厅 ================= -->
   <main id="lobby" class="screen">
     <div class="lobby-inner">
-      <header class="lobby-head">
-        <div class="lobby-title">
-          <h1 class="wordmark">德州陪练<small>HOLD'EM COACH</small></h1>
-          <p class="lobby-sub">一个人把德州扑克的流程练熟：每一步都告诉你轮到谁、为什么、能做什么。线下和朋友玩、轮到你发牌时，就不会再卡壳。</p>
-        </div>
-        <div class="fan" aria-hidden="true" id="lobby-fan"></div>
+      <header class="masthead enter" style="--i: 0">
+        <div class="wordmark"><span class="wordmark-cn">德州陪练</span><span class="wordmark-en">Hold'em Coach</span></div>
+        <button type="button" class="level-pill" id="level-pill" data-open="stats" title="查看统计">
+          <span class="level-pill-no">Lv.<span class="num" id="level-no">1</span></span>
+          <span id="level-title">新手</span>
+        </button>
       </header>
 
-      <section class="bank" aria-label="筹码与等级">
-        <div>
-          <p class="bank-label">筹码余额</p>
-          <p class="bank-amount num" id="bank-amount">10,000</p>
-          <p class="bank-last" id="bank-last" hidden></p>
+      <section class="hero" aria-label="开始">
+        <div class="hero-text enter" style="--i: 1">
+          <h1 class="headline">一个人，<br>把德州的流程练熟。</h1>
+          <p class="lede">每一步都告诉你轮到谁、为什么、能做什么。线下和朋友玩、轮到你发牌时，不再卡壳。</p>
         </div>
-        <div class="level">
-          <div class="level-row"><span>等级 <strong id="level-no">1</strong> · <strong id="level-title">新手</strong></span><span id="level-xp">0 / 100</span></div>
-          <div class="bar"><span id="level-bar" style="transform: scaleX(0)"></span></div>
-          <div class="level-row"><span id="level-next">升到下一级解锁蓝色桌布</span></div>
+        <div class="stage enter" style="--i: 2" aria-hidden="true">
+          <div class="stage-felt"></div>
+          <div class="stage-cards" id="lobby-fan"></div>
+          <div class="stage-chip stage-chip-a"></div>
+          <div class="stage-chip stage-chip-b"></div>
+          <div class="stage-btn">D</div>
+        </div>
+        <div class="hero-cta enter" style="--i: 3">
+          <div class="bank-row">
+            <div class="bank">
+              <p class="bank-label">筹码余额</p>
+              <p class="bank-amount num" id="bank-amount">10,000</p>
+            </div>
+            <p class="bank-last" id="bank-last" hidden></p>
+          </div>
+          <button type="button" class="btn btn-primary btn-xl" id="btn-start">坐下 · 买入 2,000</button>
+          <button type="button" class="btn btn-outline btn-xl" id="btn-relief" hidden>领取救济金 2,000</button>
+          <div class="table-setup" role="group" aria-label="牌桌设置">
+            <div class="seg seg-sm" id="opp-seg" role="group" aria-label="对手人数">
+              <span class="seg-label">对手</span>
+              <button type="button" data-n="2">2</button>
+              <button type="button" data-n="3">3</button>
+              <button type="button" data-n="4">4</button>
+              <button type="button" data-n="5" aria-pressed="true">5</button>
+            </div>
+            <button type="button" class="chip-toggle" role="switch" aria-checked="true" data-setting="coach" id="toggle-coach"><span class="dot"></span>教练模式</button>
+            <button type="button" class="chip-toggle" role="switch" aria-checked="false" data-setting="dealer" id="toggle-dealer"><span class="dot"></span>发牌员模式</button>
+          </div>
+          <p class="start-note" id="start-note">盲注 10 / 20，无限注现金桌。离开牌桌时筹码结算回余额。</p>
         </div>
       </section>
 
-      <section class="today" aria-label="今日">
+      <section class="today enter" style="--i: 4" aria-label="今日">
         <div class="today-head">
           <h2>今日</h2>
           <span class="today-signin" id="today-signin"></span>
@@ -58,38 +82,17 @@
         <ul class="missions" id="missions"></ul>
       </section>
 
-      <section class="setup" aria-label="开局设置">
-        <div class="setup-row">
-          <span>对手人数</span>
-          <div class="seg" id="opp-seg" role="group" aria-label="对手人数">
-            <button type="button" data-n="2">2</button>
-            <button type="button" data-n="3">3</button>
-            <button type="button" data-n="4">4</button>
-            <button type="button" data-n="5" aria-pressed="true">5</button>
-          </div>
-        </div>
-        <div class="setup-toggles">
-          <button type="button" class="switch" role="switch" aria-checked="true" data-setting="coach" id="toggle-coach">
-            <span class="switch-label">教练模式<small>解释每个动作，标出每个人还差多少，给出建议和理由</small></span>
-            <span class="switch-track"></span>
-          </button>
-          <button type="button" class="switch" role="switch" aria-checked="false" data-setting="dealer" id="toggle-dealer">
-            <span class="switch-label">发牌员模式<small>关键节点先问你：谁出盲注、谁先行动、最少加注到多少、下一步做什么、谁赢</small></span>
-            <span class="switch-track"></span>
-          </button>
-        </div>
-        <div class="start-row">
-          <button type="button" class="btn btn-primary btn-lg" id="btn-start">坐下 · 买入 2,000</button>
-          <button type="button" class="btn btn-outline btn-lg" id="btn-relief" hidden>领取救济金 2,000</button>
-          <p class="start-note" id="start-note">盲注 10 / 20，无限注现金桌。离开牌桌时筹码结算回余额。</p>
-        </div>
+      <section class="progress enter" style="--i: 5" aria-label="等级">
+        <div class="level-row"><span>等级 <strong id="level-no-2">1</strong> · <strong id="level-title-2">新手</strong></span><span class="num" id="level-xp">0 / 100</span></div>
+        <div class="bar"><span id="level-bar" style="transform: scaleX(0)"></span></div>
+        <div class="level-row"><span id="level-next">升到下一级解锁蓝色桌布</span></div>
       </section>
 
-      <nav class="lobby-links" aria-label="更多">
-        <button type="button" class="btn" data-open="rules">规则速查</button>
-        <button type="button" class="btn" data-open="achievements">成就</button>
-        <button type="button" class="btn" data-open="stats">统计</button>
-        <button type="button" class="btn" data-open="settings">设置</button>
+      <nav class="lobby-links enter" style="--i: 6" aria-label="更多">
+        <button type="button" class="btn btn-ghost" data-open="rules">规则速查</button>
+        <button type="button" class="btn btn-ghost" data-open="achievements">成就</button>
+        <button type="button" class="btn btn-ghost" data-open="stats">统计</button>
+        <button type="button" class="btn btn-ghost" data-open="settings">设置</button>
       </nav>
     </div>
   </main>
