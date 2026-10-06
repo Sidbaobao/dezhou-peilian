@@ -1,0 +1,106 @@
+/* Hallmark · custom theme "牌室" · tone: playful-utilitarian · anchor hue: 160 (绒布绿) · accent: 金 oklch(80% 0.13 85)
+ * axes: paper dark / display grotesk-sans (Bricolage Grotesque) / accent warm
+ * layout: one-screen app, three bands (flow strip / felt oval with seats on the rail / hero cards + action bar)
+ * Hallmark · pre-emit critique: P4 H4 E4 S5 R4 V4
+ */
+:root {
+  color-scheme: dark;
+
+  /* 色彩 */
+  --color-paper: oklch(17% 0.02 160);
+  --color-paper-2: oklch(21% 0.022 160);
+  --color-paper-3: oklch(26% 0.024 160);
+  --color-paper-4: oklch(31% 0.026 160);
+  --color-rule: oklch(34% 0.02 160);
+  --color-ink: oklch(94% 0.012 90);
+  --color-muted: oklch(72% 0.015 150);
+  --color-neutral: oklch(56% 0.015 150);
+  --color-accent: oklch(80% 0.13 85);
+  --color-accent-ink: oklch(22% 0.05 85);
+  --color-focus: oklch(86% 0.14 85);
+
+  --color-felt: oklch(39% 0.085 160);
+  --color-felt-deep: oklch(32% 0.08 160);
+  --color-rail: oklch(27% 0.045 60);
+  --color-rail-edge: oklch(36% 0.05 60);
+
+  --color-card: oklch(97% 0.012 85);
+  --color-card-shade: oklch(90% 0.014 85);
+  --color-card-ink: oklch(22% 0.03 250);
+  --color-card-red: oklch(50% 0.2 25);
+  --color-card-blue: oklch(48% 0.17 255);
+  --color-card-green: oklch(48% 0.14 150);
+  --color-card-back: oklch(42% 0.1 25);
+  --color-card-back-2: oklch(30% 0.09 25);
+
+  --color-good: oklch(74% 0.15 150);
+  --color-warn: oklch(80% 0.14 70);
+  --color-bad: oklch(66% 0.18 25);
+
+  --chip-5: oklch(55% 0.18 25);
+  --chip-25: oklch(50% 0.13 150);
+  --chip-100: oklch(28% 0.02 250);
+  --chip-500: oklch(50% 0.17 300);
+  --chip-1000: oklch(78% 0.13 85);
+  --chip-edge: oklch(96% 0.01 85);
+
+  /* 字体 */
+  --font-display: "Bricolage Grotesque", "Avenir Next Condensed", "Helvetica Neue", Arial, sans-serif;
+  --font-body: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", "Helvetica Neue", Arial, sans-serif;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-md: 1.25rem;
+  --text-lg: 1.5625rem;
+  --text-xl: 1.9531rem;
+  --text-2xl: 2.4414rem;
+  --text-display: clamp(2.4rem, 5vw + 1rem, 4.2rem);
+
+  /* 间距 */
+  --space-3xs: 0.125rem;
+  --space-2xs: 0.25rem;
+  --space-xs: 0.5rem;
+  --space-sm: 0.75rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2.5rem;
+  --space-2xl: 4rem;
+
+  /* 圆角 */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  /* 动效 */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-micro: 120ms;
+  --dur-short: 220ms;
+  --dur-long: 420ms;
+
+  /* 层级 */
+  --z-base: 1;
+  --z-raised: 10;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-modal: 400;
+  --z-toast: 500;
+  --z-tooltip: 600;
+
+  /* 牌桌尺寸 */
+  --card-w: clamp(30px, 8vw, 46px);
+  --hero-card-w: clamp(64px, 19vw, 100px);
+  --seat-card-w: clamp(18px, 5vw, 28px);
+}
+
+/* 可解锁的桌布 */
+:root[data-felt="blue"] { --color-felt: oklch(40% 0.08 240); --color-felt-deep: oklch(33% 0.08 240); }
+:root[data-felt="red"] { --color-felt: oklch(40% 0.1 25); --color-felt-deep: oklch(33% 0.1 25); }
+:root[data-felt="purple"] { --color-felt: oklch(38% 0.09 300); --color-felt-deep: oklch(31% 0.09 300); }
+
+/* 可解锁的牌背 */
+:root[data-back="ocean"] { --color-card-back: oklch(45% 0.1 240); --color-card-back-2: oklch(32% 0.09 240); }
+:root[data-back="forest"] { --color-card-back: oklch(45% 0.1 150); --color-card-back-2: oklch(32% 0.09 150); }

@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111f1a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="德州陪练">
+<!-- artifact:start -->
+<title>德州陪练</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23183b2e'/%3E%3Cpath d='M32 12c6 8 16 14 16 24a9 9 0 0 1-14 7l3 9h-10l3-9a9 9 0 0 1-14-7c0-10 10-16 16-24z' fill='%23e8c76a'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap">
+<!-- build:css -->
+<link rel="stylesheet" href="src/tokens.css">
+<link rel="stylesheet" href="src/styles.css">
+<!-- endbuild -->
+</head>
+<body>
+<div id="app">
+
+  <!-- ================= 大厅 ================= -->
+  <main id="lobby" class="screen">
+    <div class="lobby-inner">
+      <header class="lobby-head">
+        <h1 class="wordmark">德州陪练<small>HOLD'EM COACH</small></h1>
+        <p class="lobby-sub">一个人把德州扑克的流程练熟：每一步都告诉你轮到谁、为什么、能做什么。线下和朋友玩、轮到你发牌时，就不会再卡壳。</p>
+        <p class="daily-note" id="daily-note" hidden></p>
+      </header>
+
+      <section class="bank" aria-label="筹码与等级">
+        <div>
+          <p class="bank-label">筹码余额</p>
+          <p class="bank-amount num" id="bank-amount">10,000</p>
+        </div>
+        <div class="level">
+          <div class="level-row"><span>等级 <strong id="level-no">1</strong> · <strong id="level-title">新手</strong></span><span id="level-xp">0 / 100</span></div>
+          <div class="bar"><span id="level-bar" style="transform: scaleX(0)"></span></div>
+          <div class="level-row"><span id="level-next">升到下一级解锁蓝色桌布</span></div>
+        </div>
+      </section>
+
+      <section class="setup" aria-label="开局设置">
+        <div class="setup-row">
+          <span>对手人数</span>
+          <div class="seg" id="opp-seg" role="group" aria-label="对手人数">
+            <button type="button" data-n="2">2</button>
+            <button type="button" data-n="3">3</button>
+            <button type="button" data-n="4">4</button>
+            <button type="button" data-n="5" aria-pressed="true">5</button>
+          </div>
+        </div>
+        <div class="setup-toggles">
+          <button type="button" class="switch" role="switch" aria-checked="true" data-setting="coach" id="toggle-coach">
+            <span class="switch-label">教练模式<small>解释每个动作，给出建议和理由</small></span>
+            <span class="switch-track"></span>
+          </button>
+          <button type="button" class="switch" role="switch" aria-checked="false" data-setting="dealer" id="toggle-dealer">
+            <span class="switch-label">发牌员模式<small>关键节点先问你：谁先行动、下一步做什么、谁赢</small></span>
+            <span class="switch-track"></span>
+          </button>
+        </div>
+        <div class="start-row">
+          <button type="button" class="btn btn-primary btn-lg" id="btn-start">坐下 · 买入 2,000</button>
+          <button type="button" class="btn btn-outline btn-lg" id="btn-relief" hidden>领取救济金 2,000</button>
+          <p class="start-note" id="start-note">盲注 10 / 20，无限注现金桌。离开牌桌时筹码结算回余额。</p>
+        </div>
+      </section>
+
+      <nav class="lobby-links" aria-label="更多">
+        <button type="button" class="btn" data-open="rules">规则速查</button>
+        <button type="button" class="btn" data-open="achievements">成就</button>
+        <button type="button" class="btn" data-open="stats">统计</button>
+        <button type="button" class="btn" data-open="settings">设置</button>
+      </nav>
+    </div>
+  </main>
+
+  <!-- ================= 牌桌 ================= -->
+  <main id="table" class="screen" hidden>
+    <header class="topbar">
+      <button type="button" class="btn-icon" id="btn-leave" aria-label="离开牌桌" title="离开牌桌">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
+      <button type="button" class="flow" id="flow" aria-expanded="false" title="点开看这一轮的解释">
+        <span class="flow-line"><span class="flow-street" id="flow-street">翻牌前</span><span class="flow-text" id="flow-text">准备开始</span></span>
+        <span class="flow-why" id="flow-why"></span>
+      </button>
+      <div class="topbar-right">
+        <button type="button" class="btn-icon" id="btn-log" aria-label="发牌员记录" title="发牌员记录">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h9"/></svg>
+        </button>
+        <button type="button" class="btn-icon" id="btn-settings-table" aria-label="设置" title="设置">
+          <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <section class="table-wrap" id="table-wrap" aria-label="牌桌">
+      <div class="felt"></div>
+      <div class="board-area">
+        <div class="pot" id="pot"><span id="street-tag">底池</span><span class="num" id="pot-amount">0</span></div>
+        <div class="board" id="board"></div>
+      </div>
+      <div id="seats"></div>
+      <div id="bets"></div>
+      <div class="dealer-btn" id="dealer-btn" hidden>D</div>
+      <div id="quiz-host"></div>
+      <div id="banner-host"></div>
+    </section>
+
+    <section class="bottom" aria-label="你的手牌与动作">
+      <div class="hero-cards" id="hero-cards"></div>
+      <div class="hero-info">
+        <div class="readout"><span class="readout-title" id="readout-title">—</span><span class="readout-sub" id="readout-sub"></span></div>
+        <button type="button" class="coach-chip" id="coach-chip" hidden>
+          <svg class="icon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 1 3.5 10.9V17h-7v-3.1A6 6 0 0 1 12 3zM9.5 20h5"/></svg>
+          <span id="coach-chip-text">建议</span>
+        </button>
+      </div>
+      <div class="actions" id="actions">
+        <div class="action"><button type="button" class="btn btn-danger" id="act-fold">弃牌</button><div class="action-hint" id="hint-fold"></div></div>
+        <div class="action"><button type="button" class="btn btn-primary" id="act-check-call">过牌</button><div class="action-hint" id="hint-check-call"></div></div>
+        <div class="action"><button type="button" class="btn btn-outline" id="act-raise">加注</button><div class="action-hint" id="hint-raise"></div></div>
+      </div>
+      <div class="waiting-note" id="waiting-note" hidden>等待对手行动</div>
+      <div class="raise-panel" id="raise-panel" hidden>
+        <div class="raise-head"><span id="raise-verb">加注到</span><span class="raise-amount num" id="raise-amount">0</span></div>
+        <div class="raise-presets" id="raise-presets">
+          <button type="button" class="btn" data-preset="min">最小</button>
+          <button type="button" class="btn" data-preset="half">½ 池</button>
+          <button type="button" class="btn" data-preset="threeq">¾ 池</button>
+          <button type="button" class="btn" data-preset="pot">1 池</button>
+          <button type="button" class="btn" data-preset="allin">全下</button>
+        </div>
+        <input type="range" class="raise-slider" id="raise-slider" min="0" max="100" step="1" value="0" aria-label="加注金额">
+        <div class="raise-actions">
+          <div class="raise-stepper">
+            <button type="button" class="btn" id="raise-minus" aria-label="减少">−</button>
+            <button type="button" class="btn" id="raise-plus" aria-label="增加">+</button>
+          </div>
+          <button type="button" class="btn btn-primary" id="raise-confirm">确认</button>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" id="raise-cancel">取消</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="overlay-host"></div>
+  <div class="toast-wrap" id="toast-wrap"></div>
+
+  <!-- ================= 规则速查（模板） ================= -->
+  <template id="tpl-rules">
+    <div class="sheet-head"><h2>规则速查</h2><button type="button" class="btn-icon" data-close aria-label="关闭"><svg class="icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="tabs" role="tablist">
+      <button type="button" class="btn btn-sm" data-tab="ranks" aria-pressed="true">牌型大小</button>
+      <button type="button" class="btn btn-sm" data-tab="flow">一手牌流程</button>
+      <button type="button" class="btn btn-sm" data-tab="actions">动作与加注</button>
+      <button type="button" class="btn btn-sm" data-tab="pots">全下与边池</button>
+      <button type="button" class="btn btn-sm" data-tab="faq">常见卡壳</button>
+    </div>
+    <section data-panel="ranks">
+      <p>从大到小。两人牌型相同时比牌型里的点数，再比踢脚；花色不分大小。</p>
+      <table class="rank-table"><tbody id="rank-rows"></tbody></table>
+      <p style="margin-top:0.75rem">记法：先看有没有同花和顺子，再数相同点数的牌有几张。四张同点数最大，然后三张加一对，然后两对，一对。</p>
+    </section>
+    <section data-panel="flow" hidden>
+      <table class="flow-table">
+        <tbody>
+          <tr><th>开局</th><td>庄家按钮顺时针移一位。按钮左手第一位出小盲，第二位出大盲。发牌从小盲开始，每人一张，发两轮。</td></tr>
+          <tr><th>翻牌前</th><td>从大盲左手第一位（枪口位）开始行动。盲注已经算下注，所以其他人要跟到大盲的数额。大盲最后说话，没人加注时可以过牌。</td></tr>
+          <tr><th>翻牌</th><td>烧一张，发三张公共牌。从庄家左手第一位还在局里的人开始，庄家最后行动。</td></tr>
+          <tr><th>转牌</th><td>烧一张，发第四张公共牌。行动顺序同上。</td></tr>
+          <tr><th>河牌</th><td>烧一张，发第五张公共牌。行动顺序同上。</td></tr>
+          <tr><th>摊牌</th><td>河牌有人下注时，最后下注或加注的人先亮牌；没人下注时，庄家左手第一位先亮。然后顺时针依次亮牌，牌差的人可以不亮直接弃。</td></tr>
+          <tr><th>一轮何时结束</th><td>所有还能行动的人都表过态，而且投入的筹码相等。有人加注，就要再轮一圈让每个人回应。</td></tr>
+          <tr><th>单挑</th><td>两个人时庄家就是小盲，翻牌前庄家先行动，翻牌后大盲先行动。</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section data-panel="actions" hidden>
+      <h3>五种动作</h3>
+      <ul>
+        <li><strong>过牌</strong>：不下注，把行动交给下一位。只有在这一轮还没有人下注时才可以。</li>
+        <li><strong>下注</strong>：这一轮第一个放筹码的人叫下注。最少一个大盲。</li>
+        <li><strong>跟注</strong>：补到和当前最高下注一样多。</li>
+        <li><strong>加注</strong>：比当前下注更多。加上去的部分至少等于上一次加注的额度。</li>
+        <li><strong>弃牌</strong>：放弃这手牌，已经放进去的筹码不退。没人下注时不需要弃牌，过牌就好。</li>
+      </ul>
+      <h3>最小加注怎么算</h3>
+      <p>盲注 10 / 20。有人加注到 60，加的部分是 40。下一个人要再加注，至少要加到 60 + 40 = 100。再有人加注到 200（加了 100），后面的人就至少要到 300。</p>
+      <p>没人下注时，最小下注是一个大盲（20）。</p>
+      <h3>说话的规矩</h3>
+      <p>先说数额再放筹码，或者一次放够。只放一部分筹码又不说话，按规则只算跟注。线下常见的争议就在这里。</p>
+    </section>
+    <section data-panel="pots" hidden>
+      <h3>全下</h3>
+      <p>筹码不够跟注时可以全下，剩下的人继续在你够不到的部分里下注。全下的人之后不再行动，等摊牌。</p>
+      <h3>不足额的全下</h3>
+      <p>有人全下，但加的部分不到一个完整加注。已经行动过的人只能跟注这部分差额或弃牌，不能再加注；还没行动过的人照常可以加注。</p>
+      <h3>边池</h3>
+      <p>甲 100 全下，乙 300 全下，丙跟 300。主池是每人 100 共 300，三个人比。边池是乙和丙各多出的 200 共 400，只有乙丙两人比。甲就算牌最大，也只能赢主池。</p>
+      <h3>平分底池</h3>
+      <p>两人牌一样大就平分。分不尽的零头给庄家左手第一位赢家。</p>
+      <h3>没人跟注</h3>
+      <p>你下注 100，其他人都弃牌。超出别人投入的部分退回给你，剩下的底池归你，你不用亮牌。</p>
+    </section>
+    <section data-panel="faq" hidden>
+      <dl class="faq">
+        <dt>翻牌后到底谁先说话？</dt><dd>庄家左手第一位还在局里的人。弃牌的跳过，全下的也跳过。庄家永远最后一个。</dd>
+        <dt>大盲为什么还可以行动？</dt><dd>盲注是被迫放的，不算表过态。轮到大盲时，如果没人加注，他可以过牌或加注；有人加注就要回应。</dd>
+        <dt>什么时候这一轮才算完？</dt><dd>两个条件同时满足：每个还能行动的人都表过态，所有人投入相等。有人加注后，前面的人都要再回应一次。</dd>
+        <dt>有人全下了，剩下的人还能继续下注吗？</dt><dd>能，只要还有两个人没全下。多出来的筹码进边池，全下的人不参与边池。</dd>
+        <dt>两人单挑谁是小盲？</dt><dd>庄家是小盲。翻牌前庄家先行动，翻牌后大盲先行动。</dd>
+        <dt>发牌员什么时候烧牌？</dt><dd>每次发公共牌之前烧一张：翻牌前烧一张发三张，转牌前烧一张发一张，河牌前烧一张发一张。</dd>
+        <dt>摊牌时谁先亮？</dt><dd>河牌有人下注，最后下注或加注的人先亮。没人下注，庄家左手第一位先亮。</dd>
+        <dt>我能用一张底牌吗？能一张都不用吗？</dt><dd>都可以。最佳五张可以来自两张底牌加三张公共牌、一张加四张，或者五张全是公共牌。</dd>
+      </dl>
+    </section>
+  </template>
+
+  <template id="tpl-achievements">
+    <div class="sheet-head"><h2>成就</h2><button type="button" class="btn-icon" data-close aria-label="关闭"><svg class="icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <p id="achv-summary"></p>
+    <div class="achv-grid" id="achv-grid"></div>
+  </template>
+
+  <template id="tpl-stats">
+    <div class="sheet-head"><h2>统计</h2><button type="button" class="btn-icon" data-close aria-label="关闭"><svg class="icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="stat-grid" id="stat-grid"></div>
+  </template>
+
+  <template id="tpl-settings">
+    <div class="sheet-head"><h2>设置</h2><button type="button" class="btn-icon" data-close aria-label="关闭"><svg class="icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="settings-list" id="settings-list"></div>
+    <div class="danger-zone">
+      <button type="button" class="btn btn-danger" id="btn-reset">清空全部数据</button>
+      <small>删除余额、成就和统计，回到初始状态。</small>
+    </div>
+  </template>
+
+</div>
+<!-- build:js -->
+<script src="src/engine.js"></script>
+<script src="src/coach.js"></script>
+<script src="src/ai.js"></script>
+<script src="src/narrate.js"></script>
+<script src="src/app.js"></script>
+<!-- endbuild -->
+</body>
+</html>
