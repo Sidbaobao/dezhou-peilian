@@ -119,6 +119,8 @@
       if (eq > 0.8) f = 0.7 + rng() * 0.3;
       else if (eq > 0.6) f = 0.55 + rng() * 0.2;
       else f = 0.4 + rng() * 0.2;
+      // 牌面湿（同花、连张多）下注大一点，干的牌面小一点
+      f += c.texture.wet >= 1 ? 0.12 : -0.05;
       if (style.id === 'lag' && chance(0.2)) f += 0.3;
       let want = pot * f;
       if (eq > 0.85 && stack <= pot * 2.2) return legal.allIn;
@@ -126,8 +128,16 @@
     };
 
     if (legal.check) {
+      // 超强牌偶尔慢打，等对手下注再加注
+      if (c.tier >= 0.85 && !lastToAct && nOpp >= 1 && c.texture.wet < 1 && chance(0.12 + (1 - style.aggr) * 0.25)) {
+        return result('check', 0, 0.9);
+      }
       if (eq >= 0.55 && chance(0.55 + style.aggr * 0.45)) {
         const to = betSize(); if (to) return result('raise', to, 1.0);
+      }
+      // 河牌没成牌、只剩一个对手、对手过牌到自己：按诈唬倾向下注
+      if (game.street === 'river' && lastToAct && nOpp === 1 && c.tier < 0.2 && chance(style.bluff * 0.8)) {
+        const to = raiseTo(pot * (0.55 + rng() * 0.2)); if (to) return result('raise', to, 1.2);
       }
       if (seat === game.preflopAggressor && game.street === 'flop' && nOpp <= 2 && chance(style.aggr * 0.75)) {
         const to = raiseTo(pot * (0.45 + rng() * 0.2)); if (to) return result('raise', to, 0.9);
@@ -157,6 +167,9 @@
     }
     if (callRatio > 0.6 && eq < odds + 0.15) {
       return result('fold', 0, 1.3);
+    }
+    if (style.id === 'rock' && callRatio > 0.35 && c.tier < 0.6 && !strongDraw) {
+      return result('fold', 0, 1.2);
     }
     const looseness = -style.tight * 0.15;
     if (eq >= odds + 0.02 - looseness) {

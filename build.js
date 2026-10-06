@@ -1,6 +1,7 @@
-/* 合成单文件：
+/* 合成单文件与离线缓存脚本：
  *   dist/德州陪练.html   独立版本，本地双击即可玩
  *   dist/artifact.html   发布到 claude.ai 的版本（无 doctype / html / head / body 外壳）
+ *   sw.js                GitHub Pages 用的离线缓存脚本，版本号为构建时间
  */
 const fs = require('fs');
 const path = require('path');
@@ -8,7 +9,7 @@ const path = require('path');
 const root = __dirname;
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 
-function inlineBlock(src, startMark, endMark, build) {
+function replaceBlock(src, startMark, endMark, build) {
   const start = src.indexOf(startMark);
   const end = src.indexOf(endMark, start);
   if (start < 0 || end < 0) throw new Error('找不到标记 ' + startMark);
@@ -18,14 +19,16 @@ function inlineBlock(src, startMark, endMark, build) {
 
 const read = rel => fs.readFileSync(path.join(root, rel), 'utf8');
 
-let out = inlineBlock(html, '<!-- build:css -->', '<!-- endbuild -->', block => {
+let out = replaceBlock(html, '<!-- build:css -->', '<!-- endbuild -->', block => {
   const files = [...block.matchAll(/href="([^"]+)"/g)].map(m => m[1]);
   return '<style>\n' + files.map(read).join('\n') + '\n</style>';
 });
-out = inlineBlock(out, '<!-- build:js -->', '<!-- endbuild -->', block => {
+out = replaceBlock(out, '<!-- build:js -->', '<!-- endbuild -->', block => {
   const files = [...block.matchAll(/src="([^"]+)"/g)].map(m => m[1]);
   return '<script>\n' + files.map(read).join('\n;\n') + '\n</script>';
 });
+// 单文件版本没有 manifest 和图标文件
+out = replaceBlock(out, '<!-- pwa:start -->', '<!-- pwa:end -->', () => '');
 
 fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
 fs.writeFileSync(path.join(root, 'dist', '德州陪练.html'), out);
@@ -40,6 +43,11 @@ const body = out.slice(bodyStart, bodyEnd).trim();
 const artifact = head + '\n' + body + '\n';
 fs.writeFileSync(path.join(root, 'dist', 'artifact.html'), artifact);
 
+// 离线缓存脚本
+const version = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+fs.writeFileSync(path.join(root, 'sw.js'), read('tools/sw.template.js').replace('__VERSION__', version));
+
 const kb = n => (n / 1024).toFixed(1) + ' KB';
 console.log('dist/德州陪练.html', kb(Buffer.byteLength(out)));
 console.log('dist/artifact.html', kb(Buffer.byteLength(artifact)));
+console.log('sw.js version', version);

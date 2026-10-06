@@ -57,6 +57,19 @@
   }
 
   const OPEN_THRESHOLD = { 'UTG': 9, 'UTG+1': 9, 'MP': 8, 'HJ': 8, 'CO': 7, 'CO-1': 7, 'BTN': 6, 'BTN/SB': 6, 'SB': 7, 'BB': 7 };
+  const STYLE_NOTES = {
+    tag: '他是紧凶型，加注通常真有牌',
+    lag: '他是松凶型，加注范围很宽，不一定是大牌',
+    rock: '他是紧弱型，平时很少加注，一加注多半是大牌',
+    station: '他是松弱型，很少主动加注，加注时要当心',
+    balanced: '他打法平衡，不好从加注判断牌力',
+  };
+
+  /* 当前最佳五张（公共牌不足三张时为空） */
+  function bestFive(hole, board) {
+    if (!hole || hole.length < 2 || !board || board.length < 3) return [];
+    return evaluate(hole.concat(board)).cards;
+  }
 
   /* ---------- 翻牌后：成牌分档 ---------- */
 
@@ -243,7 +256,7 @@
       }
       // 面对加注
       const raiser = game.players[game.lastAggressor];
-      reasons.push('前面 ' + (raiser ? raiser.name : '有人') + ' 加注到 ' + game.currentBet + '，你需要补 ' + legal.toCall + ' 才能继续。');
+      reasons.push('前面 ' + (raiser ? raiser.name : '有人') + ' 加注到 ' + game.currentBet + '，你需要补 ' + legal.toCall + ' 才能继续。' + (raiser && raiser.style && STYLE_NOTES[raiser.style] ? STYLE_NOTES[raiser.style] + '。' : ''));
       if (t.score >= 12 && game.raiseCount <= 1) {
         const to = raiseTo(game.currentBet * 3);
         if (to) { reasons.push('顶级牌面对一次加注应该反加（3-bet），把底池做大。'); return mk('raise', to, '建议反加到 ' + to); }
@@ -293,7 +306,8 @@
     }
 
     const odds = potOdds(legal.toCall, pot);
-    reasons.push('对手下注后底池 ' + pot + '，你要补 ' + legal.toCall + '，跟注需要至少 ' + pct(odds) + ' 的胜率才划算。');
+    const bettor = game.players[game.lastAggressor];
+    reasons.push('对手下注后底池 ' + pot + '，你要补 ' + legal.toCall + '，跟注需要至少 ' + pct(odds) + ' 的胜率才划算。' + (bettor && bettor.style && STYLE_NOTES[bettor.style] ? STYLE_NOTES[bettor.style].replace('加注', '下注') + '。' : ''));
     if (c.tier >= 0.74) {
       const to = raiseTo(Math.max(game.currentBet * 3, game.currentBet + pot * 0.7));
       if (to) { reasons.push('强牌面对下注应该加注，让底池变大。'); return mk('raise', to, '建议加注到 ' + to); }
@@ -449,6 +463,34 @@
       else explain = '本轮所有人下注相等，这一轮结束。公共牌现在有 ' + game.board.length + ' 张，接下来烧一张牌，再' + options.find(o => o.id === step.kind).label + '。';
       return { kind, type: 'choice', answer: step.kind, options, prompt: '这一轮下注结束了。发牌员接下来该做什么？', explain };
     }
+    if (kind === 'blinds') {
+      const btn = game.button, sb = game.sbSeat, bb = game.bbSeat;
+      if (game.headsUp()) {
+        return {
+          kind, type: 'seat', answer: sb,
+          prompt: '只有两个人单挑，这一手谁出小盲？点一下那个座位。',
+          explain: '单挑时庄家自己出小盲，另一个人出大盲。翻牌前庄家先行动，翻牌后大盲先行动。这一手庄家是 ' + name(btn) + '，所以小盲也是 ' + name(sb) + '。',
+        };
+      }
+      return {
+        kind, type: 'seat', answer: sb,
+        prompt: '庄家按钮在 ' + name(btn) + '。这一手谁出小盲？点一下那个座位。',
+        explain: '庄家左手第一位出小盲，再左手一位出大盲。所以小盲是 ' + name(sb) + '，大盲是 ' + name(bb) + '。',
+      };
+    }
+    if (kind === 'min-raise') {
+      const raiser = game.players[game.lastAggressor];
+      const answer = game.currentBet + game.minRaise;
+      const candidates = [answer, game.currentBet * 2, game.currentBet + game.bb, answer + game.minRaise, game.currentBet + game.sb];
+      const values = [];
+      for (const v of candidates) if (v > game.currentBet && !values.includes(v)) values.push(v);
+      const options = values.slice(0, 3).sort((a, b) => a - b).map(v => ({ id: String(v), label: String(v) }));
+      return {
+        kind, type: 'choice', answer: String(answer), options,
+        prompt: (raiser ? name(raiser.seat) : '有人') + ' 加注到 ' + game.currentBet + '，这次加了 ' + game.minRaise + '。下一位如果想再加注，最少要加到多少？',
+        explain: '再加注至少要加上一次加注的额度：' + game.currentBet + ' + ' + game.minRaise + ' = ' + answer + '。不足这个数只能跟注或弃牌，除非全下。',
+      };
+    }
     if (kind === 'winner') {
       const pots = game.previewShowdown();
       const main = pots[0];
@@ -464,8 +506,8 @@
   }
 
   const api = {
-    STREET_NAMES, POS_NAMES, SUIT_SYMBOLS, OPEN_THRESHOLD,
-    cardText, cardsText, chenScore, holeLabel, preflopTier, boardTexture, classify, draws, equity, potOdds,
+    STREET_NAMES, POS_NAMES, SUIT_SYMBOLS, OPEN_THRESHOLD, STYLE_NOTES,
+    cardText, cardsText, chenScore, holeLabel, preflopTier, boardTexture, classify, draws, equity, potOdds, bestFive,
     recommend, hints, situation, readout, dealerQuestion, isLastToAct, positionNote, roundTo,
   };
   root.PokerCoach = api;

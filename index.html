@@ -8,6 +8,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="德州陪练">
+<!-- pwa:start -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<!-- pwa:end -->
 <!-- artifact:start -->
 <title>德州陪练</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23183b2e'/%3E%3Cpath d='M32 12c6 8 16 14 16 24a9 9 0 0 1-14 7l3 9h-10l3-9a9 9 0 0 1-14-7c0-10 10-16 16-24z' fill='%23e8c76a'/%3E%3C/svg%3E">
@@ -26,21 +30,32 @@
   <main id="lobby" class="screen">
     <div class="lobby-inner">
       <header class="lobby-head">
-        <h1 class="wordmark">德州陪练<small>HOLD'EM COACH</small></h1>
-        <p class="lobby-sub">一个人把德州扑克的流程练熟：每一步都告诉你轮到谁、为什么、能做什么。线下和朋友玩、轮到你发牌时，就不会再卡壳。</p>
-        <p class="daily-note" id="daily-note" hidden></p>
+        <div class="lobby-title">
+          <h1 class="wordmark">德州陪练<small>HOLD'EM COACH</small></h1>
+          <p class="lobby-sub">一个人把德州扑克的流程练熟：每一步都告诉你轮到谁、为什么、能做什么。线下和朋友玩、轮到你发牌时，就不会再卡壳。</p>
+        </div>
+        <div class="fan" aria-hidden="true" id="lobby-fan"></div>
       </header>
 
       <section class="bank" aria-label="筹码与等级">
         <div>
           <p class="bank-label">筹码余额</p>
           <p class="bank-amount num" id="bank-amount">10,000</p>
+          <p class="bank-last" id="bank-last" hidden></p>
         </div>
         <div class="level">
           <div class="level-row"><span>等级 <strong id="level-no">1</strong> · <strong id="level-title">新手</strong></span><span id="level-xp">0 / 100</span></div>
           <div class="bar"><span id="level-bar" style="transform: scaleX(0)"></span></div>
           <div class="level-row"><span id="level-next">升到下一级解锁蓝色桌布</span></div>
         </div>
+      </section>
+
+      <section class="today" aria-label="今日">
+        <div class="today-head">
+          <h2>今日</h2>
+          <span class="today-signin" id="today-signin"></span>
+        </div>
+        <ul class="missions" id="missions"></ul>
       </section>
 
       <section class="setup" aria-label="开局设置">
@@ -55,11 +70,11 @@
         </div>
         <div class="setup-toggles">
           <button type="button" class="switch" role="switch" aria-checked="true" data-setting="coach" id="toggle-coach">
-            <span class="switch-label">教练模式<small>解释每个动作，给出建议和理由</small></span>
+            <span class="switch-label">教练模式<small>解释每个动作，标出每个人还差多少，给出建议和理由</small></span>
             <span class="switch-track"></span>
           </button>
           <button type="button" class="switch" role="switch" aria-checked="false" data-setting="dealer" id="toggle-dealer">
-            <span class="switch-label">发牌员模式<small>关键节点先问你：谁先行动、下一步做什么、谁赢</small></span>
+            <span class="switch-label">发牌员模式<small>关键节点先问你：谁出盲注、谁先行动、最少加注到多少、下一步做什么、谁赢</small></span>
             <span class="switch-track"></span>
           </button>
         </div>
@@ -102,7 +117,10 @@
     <section class="table-wrap" id="table-wrap" aria-label="牌桌">
       <div class="felt"></div>
       <div class="board-area">
-        <div class="pot" id="pot"><span id="street-tag">底池</span><span class="num" id="pot-amount">0</span></div>
+        <ol class="tracker" id="tracker" aria-label="一手牌的阶段">
+          <li data-street="preflop">翻牌前</li><li data-street="flop">翻牌</li><li data-street="turn">转牌</li><li data-street="river">河牌</li><li data-street="showdown">摊牌</li>
+        </ol>
+        <div class="pot" id="pot"><span id="pot-label">底池</span><span class="num" id="pot-amount">0</span></div>
         <div class="board" id="board"></div>
       </div>
       <div id="seats"></div>
@@ -128,7 +146,7 @@
       </div>
       <div class="waiting-note" id="waiting-note" hidden>等待对手行动</div>
       <div class="raise-panel" id="raise-panel" hidden>
-        <div class="raise-head"><span id="raise-verb">加注到</span><span class="raise-amount num" id="raise-amount">0</span></div>
+        <div class="raise-head"><span id="raise-verb">加注到</span><span class="raise-amount num" id="raise-amount">0</span><span class="raise-note" id="raise-note"></span></div>
         <div class="raise-presets" id="raise-presets">
           <button type="button" class="btn" data-preset="min">最小</button>
           <button type="button" class="btn" data-preset="half">½ 池</button>
@@ -143,8 +161,8 @@
             <button type="button" class="btn" id="raise-plus" aria-label="增加">+</button>
           </div>
           <button type="button" class="btn btn-primary" id="raise-confirm">确认</button>
+          <button type="button" class="btn btn-ghost" id="raise-cancel">取消</button>
         </div>
-        <button type="button" class="btn btn-ghost btn-sm" id="raise-cancel">取消</button>
       </div>
     </section>
   </main>
@@ -156,13 +174,41 @@
   <template id="tpl-rules">
     <div class="sheet-head"><h2>规则速查</h2><button type="button" class="btn-icon" data-close aria-label="关闭"><svg class="icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div class="tabs" role="tablist">
-      <button type="button" class="btn btn-sm" data-tab="ranks" aria-pressed="true">牌型大小</button>
+      <button type="button" class="btn btn-sm" data-tab="dealer" aria-pressed="true">发牌员清单</button>
+      <button type="button" class="btn btn-sm" data-tab="positions">位置图</button>
+      <button type="button" class="btn btn-sm" data-tab="ranks">牌型大小</button>
       <button type="button" class="btn btn-sm" data-tab="flow">一手牌流程</button>
       <button type="button" class="btn btn-sm" data-tab="actions">动作与加注</button>
       <button type="button" class="btn btn-sm" data-tab="pots">全下与边池</button>
       <button type="button" class="btn btn-sm" data-tab="faq">常见卡壳</button>
     </div>
-    <section data-panel="ranks">
+    <section data-panel="dealer">
+      <p>轮到你发牌时照着走，一手牌十二步。</p>
+      <ol class="checklist">
+        <li><strong>移按钮</strong>：庄家按钮顺时针移到下一个有筹码的人。</li>
+        <li><strong>收盲注</strong>：按钮左手第一位出小盲，第二位出大盲。只有两个人时，庄家自己出小盲。</li>
+        <li><strong>发底牌</strong>：洗牌切牌，从小盲开始顺时针每人一张，发两轮。</li>
+        <li><strong>翻牌前叫牌</strong>：从大盲左手第一位（枪口位）开始。大盲最后说话，没人加注时他可以过牌。</li>
+        <li><strong>判断一轮结束</strong>：所有没弃牌、没全下的人都表过态，并且投入相等。有人加注，就再轮一圈。</li>
+        <li><strong>收底池</strong>：把桌上的下注推到中间。有人全下且筹码不等，分出边池。</li>
+        <li><strong>翻牌</strong>：烧一张，发三张。从庄家左手第一位还在局里的人开始叫牌。</li>
+        <li><strong>转牌</strong>：烧一张，发一张。同样顺序叫牌。</li>
+        <li><strong>河牌</strong>：烧一张，发一张。同样顺序叫牌。</li>
+        <li><strong>摊牌</strong>：河牌有人下注，最后下注或加注的人先亮；没人下注，庄家左手第一位先亮。顺时针轮流，牌小的可以不亮。</li>
+        <li><strong>分底池</strong>：先分主池，再分边池。两人一样大就平分，零头给庄家左手第一位赢家。中途所有人都弃牌，底池直接给最后一个人，他可以不亮牌。</li>
+        <li><strong>收牌</strong>：把牌收齐，回到第一步。</li>
+      </ol>
+    </section>
+    <section data-panel="positions" hidden>
+      <p>六人桌的位置名称和行动顺序。箭头方向是顺时针，也就是发牌和叫牌的方向。</p>
+      <div class="diagram" id="position-diagram"></div>
+      <ul>
+        <li><strong>翻牌前</strong>从枪口位开始，顺时针到大盲为止。</li>
+        <li><strong>翻牌后</strong>每一轮从小盲开始（小盲弃了就从下一位），庄家永远最后。</li>
+        <li><strong>人少时</strong>：五人桌没有中位；四人桌只有庄、小盲、大盲、枪口；三人桌只有庄、小盲、大盲，翻牌前庄家先说话；两人单挑庄家兼小盲。</li>
+      </ul>
+    </section>
+    <section data-panel="ranks" hidden>
       <p>从大到小。两人牌型相同时比牌型里的点数，再比踢脚；花色不分大小。</p>
       <table class="rank-table"><tbody id="rank-rows"></tbody></table>
       <p style="margin-top:0.75rem">记法：先看有没有同花和顺子，再数相同点数的牌有几张。四张同点数最大，然后三张加一对，然后两对，一对。</p>
@@ -218,6 +264,7 @@
         <dt>发牌员什么时候烧牌？</dt><dd>每次发公共牌之前烧一张：翻牌前烧一张发三张，转牌前烧一张发一张，河牌前烧一张发一张。</dd>
         <dt>摊牌时谁先亮？</dt><dd>河牌有人下注，最后下注或加注的人先亮。没人下注，庄家左手第一位先亮。</dd>
         <dt>我能用一张底牌吗？能一张都不用吗？</dt><dd>都可以。最佳五张可以来自两张底牌加三张公共牌、一张加四张，或者五张全是公共牌。</dd>
+        <dt>有人说"加注"却只放了跟注的筹码怎么办？</dt><dd>线下以口头宣布为准，他必须补足到最小加注。所以当发牌员要先问清楚数额再收筹码。</dd>
       </dl>
     </section>
   </template>
