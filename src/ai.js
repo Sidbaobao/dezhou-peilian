@@ -44,64 +44,75 @@
     /* ---------- 翻牌前 ---------- */
     if (game.street === 'preflop') {
       const score = C.chenScore(p.cards);
-      const shift = style.tight * 10; // 松紧平移门槛
+      // 每手牌每个对手有一个“心情”偏移，同样的牌不同手会有不同打法，避免一眼看穿
+      if (!p._mood || p._mood.handNo !== game.handNo) p._mood = { handNo: game.handNo, value: (rng() * 2 - 1) * 1.8 };
+      const mood = p._mood.value;
+      const shift = style.tight * 10 + mood; // 松紧平移门槛
       const group = posGroup(pos);
       const limpers = game.players.filter(q => q.seat !== seat && game.inHand(q) && q.total >= game.bb && q.seat !== game.bbSeat).length;
+      const toCallRatio = legal.toCall / Math.max(1, stack);
+      const toCallBB = legal.toCall / game.bb;
 
       if (game.raiseCount === 0) {
-        const base = { early: 9, middle: 8, late: 6.5, blinds: 7.5 }[group];
+        // 娱乐局的范围：比职业桌松得多，大部分人愿意看翻牌
+        const base = { early: 7.5, middle: 6.5, late: 5.5, blinds: 6 }[group];
         const threshold = base + shift;
         if (legal.check) {
-          // 大盲没人加注
-          if (score >= 9 + shift && chance(style.aggr * 0.8)) {
+          // 大盲没人加注：多数时候过牌看免费翻牌
+          if (score >= 9 + shift && chance(style.aggr * 0.7)) {
             const to = raiseTo(game.bb * (3 + limpers));
             if (to) return result('raise', to, 1.1);
           }
           return result('check', 0, 0.7);
         }
         if (score >= threshold) {
-          const wantRaise = chance(0.45 + style.aggr * 0.55) || score >= 11;
+          const wantRaise = chance(0.35 + style.aggr * 0.5) || score >= 11;
           if (wantRaise) {
             const to = raiseTo(game.bb * (2.5 + (style.tight < 0 ? 0.5 : 0) + limpers) + (pos === 'SB' ? game.sb : 0));
             if (to) return result('raise', to, 1.0);
           }
-          return result('call', legal.call, 0.8);
-        }
-        if (score >= threshold - 2 && (group === 'late' || group === 'blinds') && chance(0.35 - style.tight)) {
           return result('call', legal.call, 0.9);
         }
-        if (group === 'late' && chance(style.bluff * 0.6)) {
+        // 投机牌跟一下看翻牌：松的人多跟，紧的人少跟，后位和盲注位更愿意
+        const limpChance = 0.42 - style.tight * 1.2 + (group === 'late' || group === 'blinds' ? 0.15 : 0) + limpers * 0.08;
+        if (score >= threshold - 3 && chance(limpChance)) return result('call', legal.call, 0.9);
+        if (style.id === 'station' && chance(0.45)) return result('call', legal.call, 0.9);
+        if (group === 'late' && chance(style.bluff * 0.7)) {
           const to = raiseTo(game.bb * 2.5);
           if (to) return result('raise', to, 1.0);
         }
-        return result('fold', 0, 0.6);
+        return result('fold', 0, 0.8);
       }
 
-      // 面对加注
-      const toCallRatio = legal.toCall / Math.max(1, stack);
+      // 面对一次加注
       if (game.raiseCount === 1) {
-        if (score >= 12 - style.aggr * 1.5) {
-          if (legal.raise && (chance(0.5 + style.aggr * 0.5) || score >= 16)) {
+        if (score >= 11.5 - style.aggr * 2) {
+          if (legal.raise && (chance(0.45 + style.aggr * 0.5) || score >= 16)) {
             const to = raiseTo(game.currentBet * (group === 'late' ? 2.6 : 3.2));
             if (stack <= game.bb * 25 && score >= 13) return result('allin', 0, 1.3);
             if (to) return result('raise', to, 1.3);
           }
           return result('call', legal.call, 1.0);
         }
-        if (score >= 7.5 + shift && toCallRatio <= 0.18) return result('call', legal.call, 1.0);
+        if (score >= 6 + shift && toCallRatio <= 0.2) return result('call', legal.call, 1.0);
+        // 大盲已经投入了一个盲注，加注不大就宽一点防守
+        if (pos === 'BB' && toCallBB <= 2.5 && score >= 4.5 + shift && chance(0.65)) return result('call', legal.call, 1.0);
+        if (style.id === 'station' && toCallBB <= 5 && chance(0.75)) return result('call', legal.call, 1.0);
+        if (group === 'late' && score >= 5 && toCallBB <= 4 && chance(0.3 - style.tight)) return result('call', legal.call, 1.0);
         if (group === 'late' && score >= 6 && chance(style.bluff * 0.5) && legal.raise) {
           const to = raiseTo(game.currentBet * 2.8);
           if (to) return result('raise', to, 1.3);
         }
         if (legal.check) return result('check', 0, 0.7);
-        return result('fold', 0, 0.7);
+        return result('fold', 0, 0.8);
       }
       // 面对再加注
       if (score >= 16) {
         if (legal.raise && chance(0.6 + style.aggr * 0.4)) return result('allin', 0, 1.5);
         return result('call', legal.call, 1.2);
       }
-      if (score >= 12 - style.tight * 5 && toCallRatio <= 0.35) return result('call', legal.call, 1.2);
+      if (score >= 10.5 + style.tight * 5 && toCallRatio <= 0.35) return result('call', legal.call, 1.2);
+      if (style.id === 'station' && toCallRatio <= 0.15 && chance(0.5)) return result('call', legal.call, 1.1);
       if (legal.check) return result('check', 0, 0.7);
       return result('fold', 0, 0.9);
     }

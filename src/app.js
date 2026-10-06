@@ -1094,24 +1094,23 @@
       return;
     }
   }
-  /* 对手思考时间：按决定的分量、面对的压力和性格变化，偶尔长考。
+  /* 对手思考时间：以随机为主，决定类型只轻微影响，所以弃牌也可能想很久，加注也可能很快。
    * 只和他要做的决定有关，和你的牌无关。 */
   function thinkTime(g, seat, d) {
     const p = g.players[seat];
     const style = AI.STYLES[p.style] || AI.STYLES.balanced;
     const legal = g.legalActions(seat);
     const toCall = legal ? legal.toCall : 0;
-    let ms = 3000 + Math.random() * 3000;
-    ms *= { fold: 0.8, check: 0.85, call: 1.0, raise: 1.3, allin: 1.6 }[d.type] || 1;
-    if (toCall >= g.bb * 3) ms += 1000;
-    if (toCall >= g.bb * 10) ms += 1500;
-    if (g.street !== 'preflop') ms += 600;
-    if (style.id === 'rock') ms += 700;
-    if (style.id === 'lag') ms -= 400;
-    if (d.type === 'fold' && g.street === 'preflop' && toCall <= g.bb) ms *= 0.55;
-    if (Math.random() < 0.08) ms += 5000 + Math.random() * 4000;
-    ms *= Math.sqrt(d.delay || 1);
-    return T(Math.round(Math.max(1600, Math.min(16000, ms))));
+    // 偏斜分布：中位数 3.5 秒左右，常见 2 到 6 秒
+    let ms = 2000 + 5000 * Math.pow(Math.random(), 1.6);
+    ms *= ({ fold: 0.9, check: 0.9, call: 1.0, raise: 1.15, allin: 1.3 }[d.type] || 1) * (0.8 + Math.random() * 0.4);
+    if (toCall >= g.bb * 10) ms += 1000 + Math.random() * 1500;
+    if (style.id === 'rock') ms *= 1.15;
+    if (style.id === 'lag') ms *= 0.9;
+    const r = Math.random();
+    if (r < 0.12) ms *= 0.55;                              // 偶尔很快
+    else if (r > 0.92) ms += 4000 + Math.random() * 5000;  // 偶尔长考
+    return T(Math.round(Math.max(1500, Math.min(16000, ms))));
   }
 
   /* ---------- 公平性：加密级随机洗牌 + 牌堆指纹 ---------- */
