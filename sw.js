@@ -1,5 +1,5 @@
-/* 德州陪练 · 离线缓存。build.js 会把 20261006134726 换成构建时间，每次发布自动刷新缓存。 */
-const VERSION = '__VERSION__';
+/* 德州陪练 · 离线缓存。下面的版本号由 build.js 写入构建时间，每次发布自动刷新缓存。 */
+const VERSION = '20261006135319';
 const CACHE = 'dezhou-peilian-' + VERSION;
 const ASSETS = [
   './', './index.html', './manifest.webmanifest',

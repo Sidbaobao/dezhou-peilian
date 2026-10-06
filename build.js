@@ -45,7 +45,7 @@ fs.writeFileSync(path.join(root, 'dist', 'artifact.html'), artifact);
 
 // 离线缓存脚本
 const version = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
-fs.writeFileSync(path.join(root, 'sw.js'), read('tools/sw.template.js').replace('__VERSION__', version));
+fs.writeFileSync(path.join(root, 'sw.js'), read('tools/sw.template.js').split('__VERSION__').join(version));
 
 const kb = n => (n / 1024).toFixed(1) + ' KB';
 console.log('dist/德州陪练.html', kb(Buffer.byteLength(out)));

@@ -1,4 +1,4 @@
-/* 德州陪练 · 离线缓存。build.js 会把 __VERSION__ 换成构建时间，每次发布自动刷新缓存。 */
+/* 德州陪练 · 离线缓存。下面的版本号由 build.js 写入构建时间，每次发布自动刷新缓存。 */
 const VERSION = '__VERSION__';
 const CACHE = 'dezhou-peilian-' + VERSION;
 const ASSETS = [
