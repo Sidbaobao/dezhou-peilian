@@ -96,7 +96,7 @@
     for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
     return () => { h += 0x6D2B79F5; let t = h; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   }
-  const speedFactor = () => ({ slow: 1.7, normal: 1, fast: 0.45 })[profile.settings.speed] || 1;
+  const speedFactor = () => ({ slow: 1.6, normal: 1, fast: 0.4 })[profile.settings.speed] || 1;
   const T = ms => Math.round(ms * speedFactor());
   const CLOSE_ICON = '<svg class="icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 
@@ -524,13 +524,13 @@
     if (profile.bankroll < BUYIN) return;
     profile.bankroll -= BUYIN;
     const players = [{ name: '你', chips: BUYIN, isHuman: true }].concat(pickBots(profile.settings.opponents));
-    const game = new E.Game({ players, blinds: BLINDS });
+    const game = new E.Game({ players, blinds: BLINDS, rng: secureRandom });
     beginSession(game, { buyIn: BUYIN, hands: 0, wins: 0, biggestPot: 0, coachAgree: 0, coachTotal: 0 });
     saveSession(-1);
   }
   function resumeTable() {
     const s = profile.session;
-    const game = new E.Game({ players: s.players, blinds: BLINDS, button: s.button });
+    const game = new E.Game({ players: s.players, blinds: BLINDS, button: s.button, rng: secureRandom });
     game.handNo = s.handNo || 0;
     beginSession(game, s.stats || { buyIn: BUYIN, hands: 0, wins: 0, biggestPot: 0, coachAgree: 0, coachTotal: 0 });
   }
@@ -706,7 +706,10 @@
       const seat = seatEls[i];
       seat.classList.toggle('folded', p.folded);
       seat.classList.toggle('out', p.out);
-      seat.classList.toggle('active', g.phase === 'betting' && g.toAct === i && !(session.quizPending && session.quizHide));
+      const active = g.phase === 'betting' && g.toAct === i && !(session.quizPending && session.quizHide);
+      seat.classList.toggle('active', active);
+      // 计时环只在思考时长确定后才开始（botTurn / startHeroTimer 里加 thinking）
+      if (!active) seat.classList.remove('thinking');
       $('.seat-chips', seat).textContent = p.chips === 0 && !p.out ? '全下' : fmt(p.chips);
       const posEl = $('.seat-pos', seat);
       let label = pos[i];
@@ -987,6 +990,7 @@
     if (!profile.settings.heroTimer || !session) return;
     session.heroDeadline = Date.now() + HERO_SECONDS * 1000;
     seatEls[HERO].style.setProperty('--think-ms', HERO_SECONDS * 1000 + 'ms');
+    seatEls[HERO].classList.add('thinking');
     heroTick = setInterval(() => {
       if (!session || !session.heroDeadline) { stopHeroTimer(); return; }
       renderSeats();
@@ -1003,11 +1007,12 @@
   function stopHeroTimer() {
     if (heroTick) { clearInterval(heroTick); heroTick = null; }
     if (session) session.heroDeadline = null;
+    if (seatEls[HERO]) seatEls[HERO].classList.remove('thinking');
   }
 
   /* ---------- 流程 ---------- */
   function newHandRecord() {
-    return { vpip: false, heroRaised: [], heroRiverAggr: false, heroAllIn: false, heroTurnCat: null, startChips: session.game.players[HERO].chips, decisions: [], askedMinRaise: false };
+    return { vpip: false, heroRaised: [], heroRiverAggr: false, heroAllIn: false, heroTurnCat: null, startChips: session.game.players[HERO].chips, decisions: [], askedMinRaise: false, deck: null };
   }
   async function startNextHand() {
     const g = session.game, token = session.token;
@@ -1019,6 +1024,7 @@
     seatEls.forEach(s => s.classList.remove('winner'));
     const events = g.startHand();
     if (events.some(e => e.type === 'need-players')) { toast('人数不够'); return; }
+    commitDeck();
     if (profile.settings.dealer) {
       session.hideBets = true;
       await applyEvents([events[0]], token);
@@ -1088,23 +1094,81 @@
       return;
     }
   }
-  /* 对手思考时间：按决定的分量、面对的压力和性格变化，偶尔长考 */
+  /* 对手思考时间：按决定的分量、面对的压力和性格变化，偶尔长考。
+   * 只和他要做的决定有关，和你的牌无关。 */
   function thinkTime(g, seat, d) {
     const p = g.players[seat];
     const style = AI.STYLES[p.style] || AI.STYLES.balanced;
     const legal = g.legalActions(seat);
     const toCall = legal ? legal.toCall : 0;
-    let ms = 1500 + Math.random() * 1400;
-    ms *= { fold: 0.7, check: 0.75, call: 1.0, raise: 1.35, allin: 1.7 }[d.type] || 1;
-    if (toCall >= g.bb * 3) ms += 600;
-    if (toCall >= g.bb * 10) ms += 800;
-    if (g.street !== 'preflop') ms += 300;
-    if (style.id === 'rock') ms += 400;
-    if (style.id === 'lag') ms -= 300;
+    let ms = 3000 + Math.random() * 3000;
+    ms *= { fold: 0.8, check: 0.85, call: 1.0, raise: 1.3, allin: 1.6 }[d.type] || 1;
+    if (toCall >= g.bb * 3) ms += 1000;
+    if (toCall >= g.bb * 10) ms += 1500;
+    if (g.street !== 'preflop') ms += 600;
+    if (style.id === 'rock') ms += 700;
+    if (style.id === 'lag') ms -= 400;
     if (d.type === 'fold' && g.street === 'preflop' && toCall <= g.bb) ms *= 0.55;
-    if (Math.random() < 0.07) ms += 2500 + Math.random() * 2000;
+    if (Math.random() < 0.08) ms += 5000 + Math.random() * 4000;
     ms *= Math.sqrt(d.delay || 1);
-    return T(Math.round(Math.max(700, Math.min(8000, ms))));
+    return T(Math.round(Math.max(1600, Math.min(16000, ms))));
+  }
+
+  /* ---------- 公平性：加密级随机洗牌 + 牌堆指纹 ---------- */
+  function secureRandom() {
+    if (window.crypto && crypto.getRandomValues) { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] / 4294967296; }
+    return Math.random();
+  }
+  function randomHex(n) { let s = ''; while (s.length < n) s += Math.floor(secureRandom() * 16).toString(16); return s; }
+  async function sha256Hex(str) {
+    try {
+      if (window.crypto && crypto.subtle) {
+        const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+        return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+      }
+    } catch (e) { /* 退回简单哈希 */ }
+    let h = 2166136261;
+    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return 'fnv-' + (h >>> 0).toString(16).padStart(8, '0');
+  }
+  function logLine(text, tone) {
+    const line = { text, tone: tone || 'note' };
+    session.log.push(line);
+    const logEl = $('#log-list');
+    if (logEl) { logEl.append(el('div', { class: 'log-line ' + line.tone, text: line.text })); logEl.scrollTop = logEl.scrollHeight; }
+  }
+  async function commitDeck() {
+    const g = session.game, hand = session.hand;
+    const order = g.shuffled ? g.shuffled.slice().reverse() : [];
+    const salt = randomHex(8);
+    hand.deck = { order, salt, fp: null, commitment: salt + ':' + order.join(' ') };
+    hand.deck.fp = await sha256Hex(hand.deck.commitment);
+    if (session && session.hand === hand) logLine('牌堆指纹 ' + hand.deck.fp.slice(0, 12) + '（这手结束后公开整副牌顺序，可核对）', 'note');
+  }
+  function openDeckSheet(deck, players) {
+    const n = players;
+    const groups = [];
+    const seq = deck.order.slice();
+    let i = 0;
+    const take = k => seq.slice(i, i += k);
+    groups.push(['底牌，按发牌顺序每人一张发两轮', take(n * 2)]);
+    groups.push(['烧牌', take(1)]); groups.push(['翻牌', take(3)]);
+    groups.push(['烧牌', take(1)]); groups.push(['转牌', take(1)]);
+    groups.push(['烧牌', take(1)]); groups.push(['河牌', take(1)]);
+    groups.push(['没用到的牌', seq.slice(i)]);
+    const node = el('div', { class: 'result' }, [
+      sheetHead('这手牌的牌堆'),
+      el('p', { text: '开局前记录的指纹：' }),
+      el('p', { class: 'mono', text: deck.fp }),
+      el('p', { text: '指纹 = SHA-256（随机盐 + 整副牌顺序）。盐：' + deck.salt + '。下面是洗好后的整副牌，从牌堆顶开始。你可以把下面的字符串自己算一次 SHA-256，和指纹对比。' }),
+      el('p', { class: 'mono small', text: deck.commitment }),
+    ]);
+    groups.forEach(([label, cards]) => {
+      if (!cards.length) return;
+      node.append(el('div', { class: 'deck-group' }, [el('span', { class: 'deck-label', text: label }), el('div', { class: 'mini-cards wrap' }, cards.map(c => cardEl(c)))]));
+    });
+    node.append(el('div', { class: 'result-foot' }, [el('button', { type: 'button', class: 'btn btn-primary', text: '好', onclick: closeOverlays })]));
+    openSheet(node);
   }
   async function botTurn(seat, token) {
     const g = session.game;
@@ -1112,7 +1176,9 @@
     const think = thinkTime(g, seat, d);
     seatEls[seat].style.setProperty('--think-ms', think + 'ms');
     renderAll();
+    seatEls[seat].classList.add('thinking');
     await wait(think);
+    seatEls[seat].classList.remove('thinking');
     if (token.cancelled) return [];
     let events;
     try { events = g.act(seat, d); } catch (err) { events = g.act(seat, { type: g.legalActions(seat).check ? 'check' : 'fold' }); }
@@ -1389,6 +1455,14 @@
     }
     const lines = [['底池合计', fmt(res.pots.reduce((a, p) => a + p.amount, 0))], ['你的筹码变化', signed(info.netChange)], ['经验', '+' + info.xp]];
     node.append(el('div', { class: 'result-lines' }, lines.map(([k, v]) => el('div', { class: 'row' }, [el('span', { text: k }), el('span', { class: 'num', text: v })]))));
+    const deck = session.hand.deck;
+    if (deck && deck.fp) {
+      const playersN = g.players.filter(p => !p.out).length;
+      node.append(el('div', { class: 'row fair-row' }, [
+        el('span', { text: '牌堆指纹 ' + deck.fp.slice(0, 12) }),
+        el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '核对整副牌', onclick: () => openDeckSheet(deck, playersN) }),
+      ]));
+    }
     const decisions = session.hand.decisions;
     if (profile.settings.coach && decisions.length) {
       const diffs = decisions.filter(d => !d.agree);

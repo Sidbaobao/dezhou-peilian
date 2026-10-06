@@ -184,7 +184,20 @@
       <button type="button" class="btn btn-sm" data-tab="actions">动作与加注</button>
       <button type="button" class="btn btn-sm" data-tab="pots">全下与边池</button>
       <button type="button" class="btn btn-sm" data-tab="faq">常见卡壳</button>
+      <button type="button" class="btn btn-sm" data-tab="fair">公平性</button>
     </div>
+    <section data-panel="fair" hidden>
+      <h3>对手看不到你的牌</h3>
+      <p>对手做决定时只知道自己的两张底牌、公共牌、每个人的下注和位置。程序里对手的决策函数拿不到别人的底牌，也拿不到牌堆里还没发的牌。</p>
+      <h3>洗牌不可预测</h3>
+      <p>洗牌用的是浏览器提供的加密级随机数（crypto.getRandomValues），和真实洗牌一样无法预测。没有"放水"，也没有"针对"，对手不会因为你连赢或连输而拿到不一样的牌。</p>
+      <h3>每手牌都可以核对</h3>
+      <p>每手开始前，程序先把洗好的整副牌加一个随机盐算出 SHA-256 指纹，写进发牌员记录。这手结束后，结果层里可以点开整副牌的顺序，你可以自己算一次指纹对比，确认中途没有换牌。</p>
+      <h3>思考时间和你的牌无关</h3>
+      <p>对手的思考时间只和他面对的决定有关：下注大小、是不是加注、他的性格，再加一点随机。它不知道你拿什么牌，也不会故意拖延。</p>
+      <h3>你的倒计时只是提醒</h3>
+      <p>轮到你时的 30 秒倒计时默认不会替你行动，时间到了也可以继续想。设置里可以关掉倒计时，或者打开"超时自动过牌或弃牌"。</p>
+    </section>
     <section data-panel="dealer">
       <p>轮到你发牌时照着走，一手牌十二步。</p>
       <ol class="checklist">

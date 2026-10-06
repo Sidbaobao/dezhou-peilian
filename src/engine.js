@@ -255,6 +255,8 @@
 
       // 发底牌：从庄家左手第一位开始，每人一张，发两轮
       this.deck = options.deck ? options.deck.slice() : shuffle(freshDeck(), this.rng);
+      // 洗好的整副牌顺序，供界面在发牌前记录指纹、结束后公开核对
+      this.shuffled = this.deck.slice();
       const order = [];
       let s = this.nextSeat(this.button, p => !p.out);
       for (let k = 0; k < seated.length; k++) { order.push(s); s = this.nextSeat(s, p => !p.out); }
