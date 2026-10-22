@@ -530,8 +530,36 @@ kbd { font-family: var(--font-display); font-size: 10px; font-weight: 700; line-
 .danger-zone { display: flex; flex-direction: column; gap: var(--space-xs); padding-top: var(--space-sm); }
 .danger-zone small { color: var(--color-muted); }
 
+/* 筹码堆：按面额拆成一摞摞的小筹码 */
+.pile { display: flex; align-items: flex-end; gap: 2px; }
+.pile .col { position: relative; width: 16px; height: 16px; }
+.pile .col .chip { position: absolute; left: 0; bottom: 0; transform: translateY(calc(var(--k, 0) * -3px)); }
+.pot-pile { display: flex; justify-content: center; min-height: 18px; }
+.pot-pile .pile { gap: 3px; }
+
+/* 牌堆、烧牌堆、飞行中的牌 */
+.deck { position: absolute; width: var(--seat-card-w); aspect-ratio: 5 / 7; transform: translate(-50%, -50%); z-index: var(--z-base); pointer-events: none; }
+.deck span {
+  position: absolute; inset: 0; border-radius: 8%;
+  background: repeating-linear-gradient(45deg, var(--color-card-back) 0 4px, var(--color-card-back-2) 4px 8px);
+  border: 2px solid var(--color-card); box-shadow: 0 1px 2px oklch(10% 0 0 / 0.45);
+}
+.deck span:nth-child(2) { transform: translate(1px, -1px); }
+.deck span:nth-child(3) { transform: translate(2px, -2px); }
+.deck.shuffling span:nth-child(1) { animation: riffle-l var(--shuffle-ms, 1600ms) var(--ease-in-out) 1; }
+.deck.shuffling span:nth-child(3) { animation: riffle-r var(--shuffle-ms, 1600ms) var(--ease-in-out) 1; }
+@keyframes riffle-l { 0%, 100% { transform: none; } 15%, 45%, 75% { transform: translate(-62%, -8%) rotate(-10deg); } 30%, 60%, 90% { transform: translate(-8%, 0) rotate(-2deg); } }
+@keyframes riffle-r { 0%, 100% { transform: translate(2px, -2px); } 15%, 45%, 75% { transform: translate(62%, -8%) rotate(10deg); } 30%, 60%, 90% { transform: translate(10%, 0) rotate(2deg); } }
+.burn {
+  position: absolute; width: var(--seat-card-w); aspect-ratio: 5 / 7; transform: translate(-50%, -50%) rotate(10deg); border-radius: 8%;
+  background: repeating-linear-gradient(45deg, var(--color-card-back) 0 4px, var(--color-card-back-2) 4px 8px);
+  border: 2px solid var(--color-card); box-shadow: 0 1px 2px oklch(10% 0 0 / 0.45); opacity: 0.9; z-index: var(--z-base); pointer-events: none;
+}
+.flycard { position: fixed; z-index: var(--z-tooltip); pointer-events: none; box-shadow: 0 6px 14px oklch(8% 0.03 160 / 0.5); }
+
 /* 飞行筹码 */
 .fly { position: absolute; z-index: var(--z-dropdown); pointer-events: none; display: flex; align-items: center; gap: 4px; font-size: var(--text-sm); font-weight: 700; color: var(--color-accent); transform: translate(-50%, -50%); }
+.fly.fixed { position: fixed; z-index: var(--z-tooltip); }
 
 /* ---------- 宽屏调整 ---------- */
 @media (min-width: 60rem) {

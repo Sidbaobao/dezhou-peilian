@@ -547,7 +547,7 @@
     save();
   }
   function beginSession(game, stats) {
-    session = { game, token: { cancelled: false }, log: [], hand: null, stats, quizPending: false, quizHide: false, animating: false, loopActive: false, hideBets: false, rec: null };
+    session = { game, token: { cancelled: false }, log: [], hand: null, stats, quizPending: false, quizHide: false, animating: false, loopActive: false, hideBets: false, rec: null, betShown: {}, dealt: false, burned: false, preRevealed: false, thinkingSince: null };
     buildSeats();
     showTable();
     renderAll();
@@ -616,7 +616,7 @@
       seat.addEventListener('click', () => onSeatClick(i));
       seatsHost.append(seat);
       seatEls.push(seat);
-      const bet = el('div', { class: 'bet' }, [el('div', { class: 'chip-stack' }), el('span', { class: 'num' })]);
+      const bet = el('div', { class: 'bet' }, [el('div', { class: 'pile-slot' }), el('span', { class: 'num' })]);
       bet.hidden = true;
       betsHost.append(bet);
       betEls.push(bet);
@@ -645,13 +645,28 @@
     placeDealerButton();
   }
   function placeDealerButton() {
-    const g = session.game, btn = $('#dealer-btn');
-    if (g.button < 0) { btn.hidden = true; return; }
+    const g = session.game, btn = $('#dealer-btn'), deck = $('#deck'), burn = $('#burn');
+    if (g.button < 0) { btn.hidden = true; deck.hidden = true; burn.hidden = true; return; }
     const geo = seatGeometry(g.button);
-    const theta = (Math.PI / 2) + g.button * (2 * Math.PI / g.players.length) + 0.42;
+    const base = (Math.PI / 2) + g.button * (2 * Math.PI / g.players.length);
+    const theta = base + 0.42;
     btn.hidden = false;
     btn.style.left = (geo.cx + geo.rx * 0.8 * Math.cos(theta)) + 'px';
     btn.style.top = (geo.cy + geo.ry * 0.78 * Math.sin(theta)) + 'px';
+    // 牌堆和烧牌堆放在庄家身前
+    const td = base + 0.2;
+    deck.hidden = g.phase === 'idle' || g.phase === 'done';
+    deck.style.left = (geo.cx + geo.rx * 0.6 * Math.cos(td)) + 'px';
+    deck.style.top = (geo.cy + geo.ry * 0.58 * Math.sin(td)) + 'px';
+    const tb = base + 0.02;
+    burn.hidden = !session.burned || g.phase === 'done';
+    burn.style.left = (geo.cx + geo.rx * 0.52 * Math.cos(tb)) + 'px';
+    burn.style.top = (geo.cy + geo.ry * 0.5 * Math.sin(tb)) + 'px';
+  }
+  /* 某个座位下注筹码的位置（视口坐标），元素隐藏时也能算 */
+  function betPoint(i) {
+    const w = tableWrap.getBoundingClientRect();
+    return { x: w.left + parseFloat(betEls[i].style.left || '0'), y: w.top + parseFloat(betEls[i].style.top || '0') };
   }
   new ResizeObserver(() => layoutSeats()).observe(tableWrap);
 
@@ -685,11 +700,13 @@
     if (p.out) return ['', ''];
     if (p.folded) return ['弃牌', 'fold'];
     const last = actionLabel(p.lastAction);
+    // 底牌还没发完：只显示已经放出去的盲注，不提前说轮到谁
+    if (!session.dealt && g.phase === 'betting') return p.lastAction && (p.lastAction.type === 'sb' || p.lastAction.type === 'bb') && (session.betShown[p.seat] || 0) > 0 ? [last, 'ok'] : ['', ''];
     if (p.allIn) return ['全下', 'allin'];
     if (g.phase === 'betting') {
       if (g.toAct === p.seat) {
         if (session.quizPending && session.quizHide) return ['', ''];
-        if (p.seat !== HERO) return ['思考中', 'act'];
+        if (p.seat !== HERO) return [session.thinkingSince ? '思考中 · ' + Math.floor((Date.now() - session.thinkingSince) / 1000) + ' 秒' : '思考中', 'act'];
         if (session.heroDeadline) { const left = Math.max(0, Math.ceil((session.heroDeadline - Date.now()) / 1000)); return [left > 0 ? '轮到你 · ' + left + ' 秒' : '轮到你 · 时间到', 'act']; }
         return ['轮到你', 'act'];
       }
@@ -706,7 +723,7 @@
       const seat = seatEls[i];
       seat.classList.toggle('folded', p.folded);
       seat.classList.toggle('out', p.out);
-      const active = g.phase === 'betting' && g.toAct === i && !(session.quizPending && session.quizHide);
+      const active = g.phase === 'betting' && g.toAct === i && !(session.quizPending && session.quizHide) && session.dealt;
       seat.classList.toggle('active', active);
       // 计时环只在思考时长确定后才开始（botTurn / startHeroTimer 里加 thinking）
       if (!active) seat.classList.remove('thinking');
@@ -725,11 +742,12 @@
       st.className = 'seat-status ' + cls;
       const cardsEl = $('.seat-cards', seat);
       const showFace = p.revealed && p.cards.length === 2;
-      const key = (p.cards.length ? (showFace ? p.cards.join('') : 'back') : 'none') + (p.folded ? 'f' : '');
+      const hasCards = p.cards.length === 2 && session.dealt;
+      const key = (hasCards ? (showFace ? p.cards.join('') : 'back') : 'none') + (p.folded ? 'f' : '');
       if (cardsEl.dataset.key !== key) {
         cardsEl.dataset.key = key;
         cardsEl.innerHTML = '';
-        if (i !== HERO && p.cards.length === 2 && !p.folded) p.cards.forEach(c => cardsEl.append(cardEl(showFace ? c : null)));
+        if (i !== HERO && hasCards && !p.folded) p.cards.forEach(c => cardsEl.append(cardEl(showFace ? c : null)));
       }
       if (showFace && g.result && g.phase === 'done') {
         const best = p.hand ? p.hand.cards : [];
@@ -737,28 +755,36 @@
       }
     });
   }
-  function chipColor(amount) {
-    if (amount >= 1000) return 'var(--chip-1000)';
-    if (amount >= 500) return 'var(--chip-500)';
-    if (amount >= 100) return 'var(--chip-100)';
-    if (amount >= 25) return 'var(--chip-25)';
-    return 'var(--chip-5)';
+  /* 把金额拆成面额筹码：1000 金、500 紫、100 黑、25 绿、5 红，每摞最多五枚 */
+  const DENOMS = [[1000, 'var(--chip-1000)'], [500, 'var(--chip-500)'], [100, 'var(--chip-100)'], [25, 'var(--chip-25)'], [5, 'var(--chip-5)']];
+  function chipPile(amount, maxChips) {
+    const total = Math.max(0, Math.round(amount / 5) * 5);
+    const breakdown = skip => { let rest = total; const out = []; for (const [v, color] of DENOMS.slice(skip)) while (rest >= v) { out.push(color); rest -= v; } return out; };
+    // 整数额用大面额会只剩一两枚，不像一堆筹码：少于四枚时改用更小的面额来拆
+    let chips = breakdown(0), skip = 0;
+    while (chips.length < 4 && skip < DENOMS.length - 1 && total >= 20) { skip++; const alt = breakdown(skip); if (alt.length > (maxChips || 10)) break; chips = alt; }
+    if (!chips.length && amount > 0) chips.push(DENOMS[4][1]);
+    while (chips.length > (maxChips || 10)) chips.pop();
+    const pile = el('div', { class: 'pile' });
+    for (let i = 0; i < chips.length; i += 5) {
+      const col = el('div', { class: 'col' });
+      chips.slice(i, i + 5).forEach((color, k) => { const c = el('div', { class: 'chip' }); c.style.setProperty('--chip-color', color); c.style.setProperty('--k', k); col.append(c); });
+      pile.append(col);
+    }
+    return pile;
   }
+  /* 桌上的下注只在筹码“推出去”之后才显示（betShown 记录已推出的金额） */
   function renderBets() {
     const g = session.game;
     g.players.forEach((p, i) => {
       const bet = betEls[i];
-      if (p.bet > 0 && !session.hideBets) {
+      const shown = session.betShown[i] || 0;
+      if (p.bet > 0 && shown >= p.bet && !session.hideBets) {
         bet.hidden = false;
         $('.num', bet).textContent = fmt(p.bet);
-        const stack = $('.chip-stack', bet);
-        const count = Math.min(4, 1 + Math.floor(Math.log10(Math.max(1, p.bet / 10))));
-        if (stack.dataset.amt !== String(p.bet)) {
-          stack.dataset.amt = String(p.bet);
-          stack.innerHTML = '';
-          for (let k = 0; k < count; k++) { const c = el('div', { class: 'chip' }); c.style.top = (-3 * k) + 'px'; c.style.setProperty('--chip-color', chipColor(p.bet)); stack.append(c); }
-        }
-      } else bet.hidden = true;
+        const slot = $('.pile-slot', bet);
+        if (slot.dataset.amt !== String(p.bet)) { slot.dataset.amt = String(p.bet); slot.innerHTML = ''; slot.append(chipPile(p.bet, 8)); }
+      } else { bet.hidden = true; $('.pile-slot', bet).dataset.amt = ''; }
     });
   }
   function heroBestFive() {
@@ -788,22 +814,26 @@
   function renderPot() {
     const g = session.game;
     $('#pot-amount').textContent = fmt(g.phase === 'done' ? 0 : g.potTotal());
+    const pile = $('#pot-pile');
+    const collected = g.phase === 'done' ? 0 : g.potCollected();
+    if (pile.dataset.amt !== String(collected)) { pile.dataset.amt = String(collected); pile.innerHTML = ''; if (collected > 0) pile.append(chipPile(collected, 15)); }
   }
   function renderHero() {
     const g = session.game, p = g.players[HERO];
     const host = $('#hero-cards');
-    const key = p.cards.join('') + (p.folded ? 'f' : '');
+    const dealt = p.cards.length === 2 && session.dealt;
+    const key = (dealt ? p.cards.join('') : 'none') + (p.folded ? 'f' : '');
     if (host.dataset.key !== key) {
       host.dataset.key = key;
       host.innerHTML = '';
-      if (p.cards.length === 2) p.cards.forEach(c => { const n = cardEl(c); if (p.folded) n.classList.add('dim'); host.append(n); });
+      if (dealt) p.cards.forEach(c => { const n = cardEl(c); if (p.folded) n.classList.add('dim'); host.append(n); });
       else host.append(cardEl(null), cardEl(null));
     }
     const mine = heroBestFive();
     const won = g.phase === 'done' && g.result && g.result.winners.includes(HERO) && p.hand && !g.result.uncontested;
     $$('.card', host).forEach((cEl, k) => { cEl.classList.toggle('best', !!won && p.hand.cards.includes(p.cards[k])); cEl.classList.toggle('mine', mine.has(p.cards[k])); });
     const title = $('#readout-title'), sub = $('#readout-sub');
-    if (p.cards.length === 2 && !p.out) {
+    if (p.cards.length === 2 && !p.out && session.dealt) {
       const r = C.readout(p.cards, g.board);
       title.textContent = r.title;
       sub.textContent = p.folded ? '已弃牌' : (profile.settings.coach ? r.sub : '');
@@ -820,8 +850,17 @@
   function renderFlow() {
     const g = session.game;
     const s = C.situation(g, HERO);
+    const nameOf = seat => (seat === HERO ? '你' : g.players[seat].name);
+    if (g.phase === 'betting' && !session.dealt && g.button >= 0) {
+      // 洗牌、收盲注、发牌阶段：说明发牌员正在做什么，不提前透露轮到谁
+      const first = g.nextSeat(g.button, p => !p.out);
+      $('#flow-street').textContent = '开局';
+      $('#flow-text').textContent = session.shuffling ? '第 ' + g.handNo + ' 手 · 发牌员洗牌、切牌' : '收盲注，然后从庄家左手第一位 ' + nameOf(first) + ' 开始发底牌，每人一张发两轮';
+      $('#flow-why').textContent = profile.settings.coach ? '庄家按钮在 ' + nameOf(g.button) : '';
+      return;
+    }
     $('#flow-street').textContent = s.street || (g.phase === 'done' ? '结束' : '准备');
-    $('#flow-text').textContent = session.hideBets ? '第 ' + g.handNo + ' 手 · 庄家按钮在 ' + (g.button === HERO ? '你' : g.players[g.button].name) : (s.line || (g.phase === 'idle' ? '准备开始' : ''));
+    $('#flow-text').textContent = session.hideBets ? '第 ' + g.handNo + ' 手 · 庄家按钮在 ' + nameOf(g.button) : (s.line || (g.phase === 'idle' ? '准备开始' : ''));
     $('#flow-why').textContent = profile.settings.coach ? s.why : '';
   }
 
@@ -1174,9 +1213,13 @@
     const d = AI.decide(g, seat);
     const think = thinkTime(g, seat, d);
     seatEls[seat].style.setProperty('--think-ms', think + 'ms');
+    session.thinkingSince = Date.now();
     renderAll();
     seatEls[seat].classList.add('thinking');
+    const tick = setInterval(() => { if (session) renderSeats(); }, 1000);
     await wait(think);
+    clearInterval(tick);
+    if (session) session.thinkingSince = null;
     seatEls[seat].classList.remove('thinking');
     if (token.cancelled) return [];
     let events;
@@ -1187,6 +1230,7 @@
   function revealForShowdown() {
     const g = session.game;
     g.players.forEach(p => { if (g.inHand(p)) p.revealed = true; });
+    session.preRevealed = true;
   }
 
   /* ---------- 事件呈现 ---------- */
@@ -1213,50 +1257,105 @@
   function viewportCenter(elm) { const r = elm.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
   const EASE = 'cubic-bezier(0.16, 1, 0.3, 1)';
   const reduced = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  async function animateDeal(cards) {
-    if (reduced()) return;
-    const from = viewportCenter($('#dealer-btn'));
-    const anims = cards.map((c, k) => {
-      const to = viewportCenter(c);
-      const end = getComputedStyle(c).transform;
-      return c.animate(
-        [{ transform: 'translate(' + (from.x - to.x) + 'px, ' + (from.y - to.y) + 'px) scale(0.5)', opacity: 0.2 }, { transform: end === 'none' ? 'none' : end, opacity: 1 }],
-        { duration: T(380), delay: k * T(55), easing: EASE, fill: 'backwards' },
-      ).finished.catch(() => {});
-    });
-    await Promise.all(anims);
+  /* 等一个动画结束；页面被切到后台时动画不走，最多等到时长加一点就继续，流程不会卡住 */
+  function animateSafe(elm, keyframes, options) {
+    let anim = null;
+    try { anim = elm.animate(keyframes, options); } catch (e) { return Promise.resolve(); }
+    const limit = (options.duration || 0) + (options.delay || 0) + 400;
+    return Promise.race([anim.finished.catch(() => {}), wait(limit)]);
   }
-  async function animateBoard(cards) {
+
+  /* 一张牌背从牌堆飞到目标位置 */
+  function flyCard(from, targetEl, delay, dur) {
+    const to = viewportCenter(targetEl);
+    const r = targetEl.getBoundingClientRect();
+    const f = el('div', { class: 'card back flycard' }, [el('span')]);
+    f.style.width = r.width + 'px';
+    f.style.left = from.x + 'px'; f.style.top = from.y + 'px';
+    f.style.transform = 'translate(-50%, -50%)';
+    return new Promise(resolve => setTimeout(async () => {
+      document.body.append(f);
+      await animateSafe(f,
+        [{ transform: 'translate(-50%, -50%) rotate(0deg)' }, { transform: 'translate(calc(-50% + ' + (to.x - from.x) + 'px), calc(-50% + ' + (to.y - from.y) + 'px)) rotate(180deg)' }],
+        { duration: dur, easing: EASE, fill: 'forwards' });
+      f.remove();
+      resolve();
+    }, delay));
+  }
+  /* 翻面：从侧立到正面 */
+  function flipIn(e) {
     if (reduced()) return;
-    const anims = cards.map((c, k) => c.animate(
-      [{ transform: 'translateY(-14px) scale(0.85)', opacity: 0 }, { transform: 'none', opacity: 1 }],
-      { duration: T(380), delay: k * T(110), easing: EASE, fill: 'backwards' },
-    ).finished.catch(() => {}));
-    await Promise.all(anims);
+    const end = getComputedStyle(e).transform;
+    e.animate([{ transform: 'rotateY(90deg)' }, { transform: end === 'none' ? 'none' : end }], { duration: T(220), easing: EASE }).finished.catch(() => {});
+  }
+  /* 发底牌：从庄家左手第一位开始，每人一张发两轮 */
+  async function dealHoleCards(order) {
+    const targets = [];
+    for (let round = 0; round < 2; round++) for (const seat of order) {
+      const e = seat === HERO ? $$('#hero-cards .card')[round] : $$('.card', $('.seat-cards', seatEls[seat]))[round];
+      if (e) targets.push({ e, seat });
+    }
+    if (reduced() || !targets.length) return;
+    const from = viewportCenter($('#deck'));
+    targets.forEach(t => { t.e.style.visibility = 'hidden'; });
+    await Promise.all(targets.map((t, i) => flyCard(from, t.e, i * T(150), T(260)).then(() => {
+      t.e.style.visibility = '';
+      if (t.seat === HERO) flipIn(t.e);
+      if (i % 2 === 0) Sound.deal();
+    })));
+  }
+  /* 发公共牌：先烧一张到烧牌堆，再从牌堆一张张发到桌面 */
+  async function dealBoard(count) {
+    const from = viewportCenter($('#deck'));
+    const burn = $('#burn');
+    burn.hidden = false;
+    if (!reduced()) {
+      burn.style.visibility = 'hidden';
+      await flyCard(from, burn, 0, T(220));
+      burn.style.visibility = '';
+    }
+    session.burned = true;
+    const els = $$('#board .card').slice(-count);
+    if (reduced()) return;
+    els.forEach(e => { e.style.visibility = 'hidden'; });
+    await Promise.all(els.map((e, k) => flyCard(from, e, k * T(170), T(260)).then(() => { e.style.visibility = ''; flipIn(e); Sound.deal(); })));
+  }
+  /* 筹码从座位推到桌上 */
+  async function flyChips(from, to, amount) {
+    if (reduced() || !amount) return;
+    const f = el('div', { class: 'fly fixed' }, [chipPile(amount, 6)]);
+    f.style.left = from.x + 'px'; f.style.top = from.y + 'px';
+    document.body.append(f);
+    await animateSafe(f, [{ transform: 'translate(-50%, -50%)' }, { transform: 'translate(calc(-50% + ' + (to.x - from.x) + 'px), calc(-50% + ' + (to.y - from.y) + 'px))' }], { duration: T(320), easing: EASE, fill: 'forwards' });
+    f.remove();
+  }
+  async function pushChips(seat, amount) {
+    const box = $('.seat-box', seatEls[seat]);
+    await flyChips(viewportCenter(box), betPoint(seat), amount);
+    session.betShown[seat] = session.game.players[seat].bet;
+    renderBets();
   }
   async function animateBetsToPot() {
     const target = centerOf($('#pot'));
     const moving = betEls.filter(b => !b.hidden);
     if (!moving.length) return;
     Sound.chip();
-    if (reduced()) { moving.forEach(b => { b.hidden = true; }); return; }
+    if (reduced()) { moving.forEach(b => { b.hidden = true; }); session.betShown = {}; return; }
     const anims = moving.map(b => {
       const from = centerOf(b);
-      return b.animate([{ transform: 'translate(-50%, -50%)' }, { transform: 'translate(calc(-50% + ' + (target.x - from.x) + 'px), calc(-50% + ' + (target.y - from.y) + 'px))', opacity: 0.2 }], { duration: T(420), easing: EASE, fill: 'forwards' }).finished.catch(() => {});
+      return animateSafe(b, [{ transform: 'translate(-50%, -50%)' }, { transform: 'translate(calc(-50% + ' + (target.x - from.x) + 'px), calc(-50% + ' + (target.y - from.y) + 'px))', opacity: 0.2 }], { duration: T(420), easing: EASE, fill: 'forwards' });
     });
     await Promise.all(anims);
     moving.forEach(b => { b.hidden = true; b.getAnimations().forEach(a => a.cancel()); });
+    session.betShown = {};
   }
   async function flyPot(seat, amount) {
-    const from = centerOf($('#pot')), to = centerOf($('.seat-box', seatEls[seat]));
-    const f = el('div', { class: 'fly' }, [el('div', { class: 'chip' }), el('span', { class: 'num', text: '+' + fmt(amount) })]);
+    const from = centerOf($('#pot-pile')), to = centerOf($('.seat-box', seatEls[seat]));
+    const f = el('div', { class: 'fly' }, [chipPile(amount, 10), el('span', { class: 'num', text: '+' + fmt(amount) })]);
     f.style.left = from.x + 'px'; f.style.top = from.y + 'px';
-    $('.chip', f).style.setProperty('--chip-color', chipColor(amount));
+    $('#pot-pile').innerHTML = ''; $('#pot-pile').dataset.amt = '';
     tableWrap.append(f);
-    try {
-      await f.animate([{ transform: 'translate(-50%, -50%)' }, { transform: 'translate(calc(-50% + ' + (to.x - from.x) + 'px), calc(-50% + ' + (to.y - from.y) + 'px))' }], { duration: T(reduced() ? 120 : 650), easing: EASE, fill: 'forwards' }).finished;
-    } catch (e) { /* 忽略 */ }
+    await animateSafe(f, [{ transform: 'translate(-50%, -50%)' }, { transform: 'translate(calc(-50% + ' + (to.x - from.x) + 'px), calc(-50% + ' + (to.y - from.y) + 'px))' }], { duration: T(reduced() ? 120 : 650), easing: EASE, fill: 'forwards' });
     f.remove();
   }
 
@@ -1271,21 +1370,32 @@
       if (token.cancelled) return;
       log(ev);
       switch (ev.type) {
-        case 'hand-start':
+        case 'hand-start': {
+          session.betShown = {}; session.dealt = false; session.burned = false; session.preRevealed = false; session.shuffling = true;
           renderAll();
+          // 发牌员洗牌、切牌
+          const deck = $('#deck');
+          deck.hidden = false;
+          logLine('发牌员洗牌、切牌', 'deal');
+          if (!reduced()) { deck.style.setProperty('--shuffle-ms', T(1600) + 'ms'); deck.classList.add('shuffling'); }
           if (profile.settings.coach && ev.button === HERO) showBanner('这一手你是庄家：翻牌后你最后行动', 1800);
-          await wait(T(350));
+          await wait(T(reduced() ? 300 : 1750));
+          deck.classList.remove('shuffling');
+          session.shuffling = false;
+          renderFlow();
           break;
+        }
         case 'blind':
           Sound.chip();
-          renderSeats(); renderBets(); renderPot();
-          await wait(T(260));
+          await pushChips(ev.seat, ev.amount);
+          renderSeats(); renderPot();
+          await wait(T(200));
           break;
         case 'deal-hole': {
-          Sound.deal();
+          session.dealt = true;
           renderSeats(); renderHero();
-          await animateDeal($$('#hero-cards .card').concat($$('.seat-cards .card')));
-          await wait(T(120));
+          await dealHoleCards(ev.order);
+          await wait(T(150));
           break;
         }
         case 'street':
@@ -1301,6 +1411,7 @@
           break;
         case 'action': {
           if (ev.action === 'fold') Sound.fold(); else if (ev.action === 'check') Sound.check(); else Sound.chip();
+          if (ev.amount > 0) await pushChips(ev.seat, ev.amount);
           renderSeats(); renderBets(); renderPot();
           if (ev.seat === HERO) renderHero();
           await wait(T(ev.seat === HERO ? 150 : 320));
@@ -1317,28 +1428,43 @@
           await wait(T(ev.uncontested ? 250 : 500));
           break;
         }
-        case 'all-in-showdown':
-          revealForShowdown();
-          renderSeats();
+        case 'all-in-showdown': {
+          const seats = g.players.filter(p => g.inHand(p)).map(p => p.seat);
           showBanner('全部全下，先亮牌再发完公共牌', 1600);
-          await wait(T(900));
+          for (const s of seats) {
+            g.players[s].revealed = true;
+            renderSeats();
+            $$('.card', $('.seat-cards', seatEls[s])).forEach(flipIn);
+            await wait(T(450));
+          }
+          session.preRevealed = true;
+          await wait(T(500));
           break;
+        }
         case 'deal-board': {
-          Sound.deal();
           renderBoard();
-          await animateBoard($$('#board .card').slice(-ev.cards.length));
+          await dealBoard(ev.cards.length);
           renderHero(); renderFlow();
-          await wait(T(200));
+          await wait(T(250));
           break;
         }
         case 'showdown': {
-          if (!profile.settings.showBots) {
-            const winners = new Set();
-            g.previewShowdown().forEach(pot => pot.winners.forEach(w => winners.add(w)));
-            g.players.forEach((p, i) => { if (i !== HERO && !winners.has(i)) p.revealed = false; });
+          // 按规则顺序一个一个亮牌：河牌有人下注则最后下注者先亮，否则庄家左手第一位先亮
+          const winners = new Set(g.result ? g.result.winners : []);
+          const hideLosers = !profile.settings.showBots;
+          if (!session.preRevealed) { ev.reveals.forEach(r => { g.players[r.seat].revealed = false; }); renderSeats(); }
+          for (const r of ev.reveals) {
+            const p = g.players[r.seat];
+            if (hideLosers && r.seat !== HERO && !winners.has(r.seat)) { p.revealed = false; continue; }
+            if (p.revealed && session.preRevealed) continue;
+            p.revealed = true;
+            renderSeats();
+            $$('.card', $('.seat-cards', seatEls[r.seat])).forEach(flipIn);
+            Sound.deal();
+            await wait(T(650));
           }
           renderSeats();
-          await wait(T(700));
+          await wait(T(500));
           break;
         }
         case 'returned':
